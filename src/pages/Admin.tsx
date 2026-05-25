@@ -65,9 +65,11 @@ export const Admin: React.FC = () => {
   // Selected Booking overlays
   const [targetBooking, setTargetBooking] = useState<Booking | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     setShowCancelConfirm(false);
+    setShowDeleteConfirm(false);
   }, [targetBooking?.id]);
 
   // New cost line item state
@@ -189,6 +191,44 @@ export const Admin: React.FC = () => {
       setShowCancelConfirm(false);
     } catch (err: any) {
       setGlobalErr(err?.message || 'Error occurred while cancelling the booking.');
+    }
+  };
+
+  const handleDeleteBooking = async () => {
+    if (!isAdmin || !targetBooking) return;
+    const bookingId = targetBooking.id;
+    try {
+      setGlobalErr('');
+      if (isSupabaseConfigured && supabase) {
+        console.log('[Delete Process] Initiating Supabase delete request for bookingId:', bookingId);
+        const { error } = await supabase
+          .from('bookings')
+          .delete()
+          .eq('id', bookingId);
+        console.log('[Delete Process] Supabase returned error state:', error);
+        
+        if (error) {
+          console.error('Delete error:', error);
+          setGlobalErr('Failed to delete booking');
+          setTimeout(() => setGlobalErr(''), 4000);
+          return;
+        }
+      } else {
+        console.log('[Delete Process] Supabase not active. Deleting from local fallback storage. BookingID:', bookingId);
+        const bookingsData = JSON.parse(localStorage.getItem('shed_bookings') || '[]');
+        const filtered = bookingsData.filter((b: any) => b.id !== bookingId);
+        localStorage.setItem('shed_bookings', JSON.stringify(filtered));
+      }
+
+      setBookings(prev => prev.filter(b => b.id !== bookingId));
+      setTargetBooking(null);
+      setShowDeleteConfirm(false);
+      setGlobalMsg('Booking deleted successfully');
+      setTimeout(() => setGlobalMsg(''), 4000);
+    } catch (error: any) {
+      console.error('Unexpected error in handleDeleteBooking:', error);
+      setGlobalErr('Failed to delete booking');
+      setTimeout(() => setGlobalErr(''), 4000);
     }
   };
 
@@ -797,6 +837,52 @@ export const Admin: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => setShowCancelConfirm(false)}
+                                className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-gray-400 hover:text-white font-mono font-bold uppercase text-[9px] cursor-pointer"
+                              >
+                                {language === 'ar' ? 'تراجع' : 'Cancel'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Admin Delete Booking Override Button */}
+                    {isAdmin && (
+                      <div className="mb-6 p-4 bg-black border border-red-650 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs font-mono">
+                        <div>
+                          <span className="text-[10px] text-red-600 uppercase block font-bold tracking-wider">
+                            {language === 'ar' ? 'منطقة الخطر' : 'Danger Zone / System Purge'}
+                          </span>
+                          <span className="text-[9px] text-gray-400 block leading-normal mt-0.5">
+                            {language === 'ar' ? 'حذف هذا الحجز نهائيًا من قاعدة البيانات' : 'Permanently delete this booking record from database records'}
+                          </span>
+                        </div>
+                        
+                        {!showDeleteConfirm ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowDeleteConfirm(true)}
+                            className="bg-red-950/20 text-red-500 hover:text-white uppercase font-bold text-[10px] font-mono border border-red-600 hover:bg-red-900 px-3 py-1.5 transition-colors cursor-pointer"
+                          >
+                            {language === 'ar' ? 'حذف الحجز' : 'Delete Booking'}
+                          </button>
+                        ) : (
+                          <div className="flex flex-col gap-2 w-full sm:w-auto">
+                            <span className="text-red-500 text-[10px] uppercase font-bold text-left block">
+                              {language === 'ar' ? 'هل أنت متأكد من الحذف النهائي؟ لا يمكن التراجع.' : 'Permanently delete booking? This action is irreversible.'}
+                            </span>
+                            <div className="flex gap-2 justify-end">
+                              <button
+                                type="button"
+                                onClick={handleDeleteBooking}
+                                className="px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white font-mono font-bold uppercase text-[9px] cursor-pointer"
+                              >
+                                {language === 'ar' ? 'تأكيد الحذف' : 'Confirm Delete'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setShowDeleteConfirm(false)}
                                 className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-gray-400 hover:text-white font-mono font-bold uppercase text-[9px] cursor-pointer"
                               >
                                 {language === 'ar' ? 'تراجع' : 'Cancel'}
