@@ -128,14 +128,6 @@ export const Login: React.FC = () => {
 
         {/* Guest fallback trigger or Demo Quick Login seed */}
         <div className="mt-6 pt-6 border-t border-gray-900 text-center space-y-4">
-          <button
-            type="button"
-            onClick={handleSetDemoAdmin}
-            className="text-xs font-mono text-lime-primary hover:underline uppercase tracking-wide bg-zinc-950 px-3 py-1.5 border border-zinc-900 rounded-none cursor-pointer"
-          >
-            🔑 {language === 'ar' ? 'تخطي للدخول كمسؤول (تجريبي)' : 'AUTO-FILL DEMO ADMIN CREDENTIALS'}
-          </button>
-
           <p className="text-xs text-gray-500 font-mono">
             {t('dontHaveAccount')}{' '}
             <Link to="/signup" className="text-white font-bold hover:text-lime-primary uppercase transition-colors">
