@@ -1,53 +1,40 @@
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: 'Inter', 'Cairo', sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-arabic: "Cairo", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
+  --color-lime-primary: #CCFF00;
 }
 
-body {
-  background-color: #000000;
-  color: #ffffff;
-  font-family: 'Inter', 'Cairo', sans-serif;
-  cursor: grab;
+/* Custom styles for high-contrast active states */
+::selection {
+  background-color: #CCFF00;
+  color: #000000;
 }
 
-/* Hide scrollbar for Chrome, Safari and Opera */
+/* Scrollbar styling for high-contrast theme */
 ::-webkit-scrollbar {
-  display: none !important;
-  width: 0 !important;
-  height: 0 !important;
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #000000;
+}
+::-webkit-scrollbar-thumb {
+  background: #CCFF00;
+  border-radius: 3px;
 }
 
-/* Hide scrollbar for IE, Edge and Firefox */
-html, body, * {
-  -ms-overflow-style: none !important;  /* IE and Edge */
-  scrollbar-width: none !important;  /* Firefox */
-}
-
-/* @media print override to isolate and print receipt beautifully */
+/* Print utility styles */
 @media print {
-  html, body {
-    background-color: #ffffff !important;
-    color: #000000 !important;
-    cursor: default !important;
+  body {
+    background: white !important;
+    color: black !important;
   }
-  body * {
-    visibility: hidden;
-  }
-  #printable-receipt-card, #printable-receipt-card * {
-    visibility: visible;
-  }
-  #printable-receipt-card {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    max-width: 100% !important;
-    border: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    box-shadow: none !important;
+  .no-print {
+    display: none !important;
   }
 }

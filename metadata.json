@@ -1,6 +1,6 @@
 {
-  "name": "Byscon Service",
-  "description": "Home Maintenance And Professional Consultations",
+  "name": "SHED",
+  "description": "Internal bilingual home maintenance services platform for SHED.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

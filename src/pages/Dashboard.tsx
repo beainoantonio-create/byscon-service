@@ -1,481 +1,516 @@
-import React, { useState } from 'react';
-import { useApp } from '../context/AppContext';
-import { useNavigate, Link } from 'react-router-dom';
-import { TRANSLATIONS } from '../data';
-import ServiceIcon from '../components/ServiceIcon';
-import { Booking, TimeSlot, BookingStatus } from '../types';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
+import db from '../lib/db';
+import { Booking } from '../types';
+import { ServiceIcon } from '../components/ServiceIcon';
+import { 
+  Calendar, 
+  MapPin, 
+  Clock, 
+  AlertTriangle, 
+  CheckCircle, 
+  XCircle, 
+  Play, 
+  History,
+  Info,
+  CalendarDays,
+  X,
+  RefreshCw
+} from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
-  const { 
-    language, 
-    currentUser, 
-    bookings, 
-    cancelBooking, 
-    rescheduleBooking, 
-    logout, 
-    toggleLanguage,
-    updateBookingStatus
-  } = useApp();
-  const navigate = useNavigate();
-  const t = TRANSLATIONS[language];
+  const { user } = useAuth();
+  const { t, language } = useLanguage();
 
-  // Protect route
-  React.useEffect(() => {
-    if (!currentUser) {
-      navigate('/login');
-    }
-  }, [currentUser, navigate]);
-
-  // States
-  const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
-  const [enlargedPhoto, setEnlargedPhoto] = useState<string | null>(null);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   
-  // Reschedule state
-  const [selectedRescheduleBooking, setSelectedRescheduleBooking] = useState<Booking | null>(null);
+  // Rescheduling overlay modal states
+  const [targetReschedule, setTargetReschedule] = useState<Booking | null>(null);
   const [newDate, setNewDate] = useState('');
-  const [newSlot, setNewSlot] = useState<TimeSlot>('morning');
+  const [newTimeSlot, setNewTimeSlot] = useState<Booking['time_slot']>('Morning');
+  const [rescheduleSubmitting, setRescheduleSubmitting] = useState(false);
 
-  if (!currentUser) return null;
+  // Booking detail view states
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
-  // Filter user bookings
-  const userBookings = bookings.filter((b) => b.userId === currentUser.id);
-
-  const upcomingBookings = userBookings.filter((b) => 
-    b.status === 'Pending' || b.status === 'Confirmed' || b.status === 'In Progress'
-  );
-
-  const pastBookings = userBookings.filter((b) => 
-    b.status === 'Completed' || b.status === 'Cancelled'
-  );
-
-  const displayedBookings = activeTab === 'upcoming' ? upcomingBookings : pastBookings;
-
-  const handleOpenReschedule = (booking: Booking) => {
-    setSelectedRescheduleBooking(booking);
-    setNewDate(booking.date);
-    setNewSlot(booking.timeSlot);
+  const fetchUserBookings = async () => {
+    if (!user) return;
+    try {
+      setLoading(true);
+      const data = await db.getBookings('customer', user.id);
+      setBookings(data);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to sync your dashboard requests.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSaveReschedule = (e: React.FormEvent) => {
+  useEffect(() => {
+    fetchUserBookings();
+  }, [user]);
+
+  const handleCancelBooking = async (bookingId: string) => {
+    const doubleCheck = window.confirm(t('cancelConfirm'));
+    if (!doubleCheck) return;
+
+    try {
+      setError('');
+      await db.updateBookingStatus(bookingId, 'Cancelled');
+      await fetchUserBookings();
+      // Update selected modal too if open
+      if (selectedBooking && selectedBooking.id === bookingId) {
+        setSelectedBooking(prev => prev ? { ...prev, status: 'Cancelled' } : null);
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Cancellation operation aborted.');
+    }
+  };
+
+  const triggerRescheduleModal = (bk: Booking, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTargetReschedule(bk);
+    setNewDate(bk.date);
+    setNewTimeSlot(bk.time_slot);
+  };
+
+  const submitReschedule = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedRescheduleBooking || !newDate) return;
+    if (!targetReschedule) return;
 
-    rescheduleBooking(selectedRescheduleBooking.id, newDate, newSlot);
-    setSelectedRescheduleBooking(null);
+    try {
+      setRescheduleSubmitting(true);
+      setError('');
+      await db.updateBookingDetails(targetReschedule.id, newDate, newTimeSlot);
+      setTargetReschedule(null);
+      await fetchUserBookings();
+    } catch (err: any) {
+      setError(err?.message || 'Rescheduling failed.');
+    } finally {
+      setRescheduleSubmitting(false);
+    }
   };
 
-  // Status mapping
-  const getStatusLabel = (status: BookingStatus) => {
+  const getStatusStyle = (status: Booking['status']) => {
     switch (status) {
-      case 'Pending': return t.statusPending;
-      case 'Confirmed': return t.statusConfirmed;
-      case 'In Progress': return t.statusInProgress;
-      case 'Completed': return t.statusCompleted;
-      case 'Cancelled': return t.statusCancelled;
-      default: return status;
+      case 'Pending':
+        return 'border border-gray-700 text-gray-400 bg-neutral-950 font-mono';
+      case 'Confirmed':
+        return 'border border-lime-primary text-lime-primary bg-black font-mono';
+      case 'In Progress':
+        return 'border border-lime-primary text-black bg-lime-primary font-mono';
+      case 'Completed':
+        return 'border border-white text-white bg-black font-sans font-medium';
+      case 'Cancelled':
+        return 'border border-red-950 text-red-500 bg-black font-sans';
+      default:
+        return 'border border-gray-800 text-gray-500 bg-black';
     }
   };
 
-  const getUrgencyLabel = (urg: string) => {
-    switch (urg) {
-      case 'normal': return t.urgencyNormalLabel;
-      case 'urgent': return t.urgencyUrgentLabel;
-      case 'emergency': return t.urgencyEmergencyLabel;
-      default: return urg;
-    }
-  };
-
-  const slotTranslations = (slot: string) => {
-    switch (slot) {
-      case 'morning': return t.slotMorning;
-      case 'afternoon': return t.slotAfternoon;
-      case 'evening': return t.slotEvening;
-      default: return slot;
-    }
-  };
+  // Split bookings
+  const upcomingBookings = bookings.filter(b => b.status === 'Pending' || b.status === 'Confirmed' || b.status === 'In Progress');
+  const pastBookings = bookings.filter(b => b.status === 'Completed' || b.status === 'Cancelled');
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white flex flex-col justify-between" dir={language === 'ar' ? 'rtl' : 'ltr'}>
-      {/* HEADER NAVBAR */}
-      <header className="border-b border-[#1A1A1A] bg-black sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center p-4 gap-4 px-6">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-[#CCFF00] rounded-sm shrink-0 flex items-center justify-center text-black font-extrabold text-[12px] tracking-tighter">
-              MT
-            </div>
-            <div>
-              <Link to="/" className="font-sans font-black text-2xl tracking-tighter text-[#CCFF00] hover:text-white transition-colors leading-none block">
-                M-TECH
-              </Link>
-              <p className="font-mono text-[9px] text-white/40 tracking-widest mt-0.5 uppercase">
-                {language === 'en' ? 'SYSTEMS GATE' : 'بوابة النظام'}
-              </p>
-            </div>
+    <div id="customer-dashboard-viewport" className="bg-black text-white min-h-[calc(100vh-4.5rem)] pb-18">
+      {/* Dashboard Headline */}
+      <section className="bg-zinc-950 border-b border-gray-900 py-10 relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <span className="font-mono text-[9px] text-lime-primary tracking-widest uppercase">
+              {language === 'ar' ? 'البوابة الآمنة للمواطنين' : 'SECURED CUSTOMER INTERFACE'}
+            </span>
+            <h1 className="font-sans text-3xl font-black text-white uppercase mt-1">
+              {language === 'ar' ? 'بوابة حجوزاتي الشخصية' : 'Personal Requests Hub'}
+            </h1>
           </div>
-
-          <div className="flex items-center gap-4 font-mono text-xs">
-            <Link to="/" className="tracking-widest text-white hover:text-[#CCFF00] uppercase transition-all">
-              {t.navHome}
-            </Link>
-
-            {currentUser.role === 'admin' && (
-              <Link to="/admin" className="tracking-widest text-[#CCFF00] hover:underline uppercase transition-all font-black">
-                [{t.navAdmin}]
-              </Link>
-            )}
-            
-            <button
-              onClick={() => { logout(); navigate('/'); }}
-              className="tracking-widest text-white hover:text-red-500 uppercase transition-colors cursor-pointer flex items-center gap-1 bg-[#1A1A1A] px-2.5 py-1.5 border border-white/5"
-            >
-              <ServiceIcon name="LogOut" className="w-3 h-3 text-[#CCFF00]" />
-              <span>{t.navLogout}</span>
-            </button>
-
-            <button
-              onClick={toggleLanguage}
-              className="border border-[#CCFF00]/60 text-[#CCFF00] hover:bg-[#CCFF00] hover:text-black text-xs px-3 py-1.5 tracking-widest transition-all cursor-pointer uppercase rounded-sm"
-            >
-              {t.langToggle}
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* DASHBOARD HERO / SUBHEADER */}
-      <section className="bg-black py-10 border-b border-[#1A1A1A]">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="text-xs font-mono text-[#CCFF00] tracking-widest uppercase mb-1">
-            {t.dashboardSubtitle}
-          </div>
-          <h2 className="text-3xl font-sans font-black tracking-tight uppercase">
-            {t.dashboardTitle}
-          </h2>
-          <p className="text-sm text-white/50 font-mono mt-1.5 uppercase">
-            {t.roleCustomer}: <span className="text-[#CCFF00] font-sans font-bold">{currentUser.name}</span> | {currentUser.email} | {currentUser.phone}
-          </p>
+          <button
+            onClick={fetchUserBookings}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-800 hover:border-lime-primary hover:text-black hover:bg-lime-primary text-xs font-mono rounded transition-colors uppercase font-bold cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>{language === 'ar' ? 'تحديث البيانات' : 'Sync Records'}</span>
+          </button>
         </div>
       </section>
 
-      {/* TABS SELECTORS */}
-      <main className="flex-grow max-w-7xl mx-auto w-full p-6 md:p-12 px-6">
-        
-        {/* Navigation Tabs in sleek selectors */}
-        <div className="bg-[#1A1A1A] p-1.5 rounded-xl flex gap-1 border border-white/5 mb-8 max-w-lg font-mono text-xs uppercase tracking-widest">
-          <button
-            onClick={() => setActiveTab('upcoming')}
-            className={`flex-1 py-3 px-6 rounded-lg transition-all cursor-pointer text-center font-black ${
-              activeTab === 'upcoming'
-                ? 'bg-[#CCFF00] text-black shadow-lg scale-[1.01]'
-                : 'text-white/50 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            {language === 'en' ? 'Active Orders' : 'الطلبات النشطة والزيارات'} ({upcomingBookings.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('past')}
-            className={`flex-1 py-3 px-6 rounded-lg transition-all cursor-pointer text-center font-black ${
-              activeTab === 'past'
-                ? 'bg-[#CCFF00] text-black shadow-lg scale-[1.01]'
-                : 'text-white/50 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            {language === 'en' ? 'Historical Records' : 'سجل العمليات المؤرشف'} ({pastBookings.length})
-          </button>
-        </div>
-
-        {/* Display bookings list */}
-        {displayedBookings.length === 0 ? (
-          <div className="border border-dashed border-white/10 p-12 text-center text-white/40 rounded-3xl bg-[#1A1A1A]/30">
-            <div className="flex flex-col items-center justify-center gap-3">
-              <ServiceIcon name="FolderSync" className="w-8 h-8 text-[#CCFF00]" />
-              <p className="font-sans text-sm font-medium">{t.noBookings}</p>
-              <Link to="/" className="text-xs font-mono tracking-widest uppercase text-[#CCFF00] hover:underline mt-2">
-                &rarr; {language === 'en' ? 'SUBMIT NEW SERVICE BOOKING' : 'تأكيد وإصدار طلب صيانة جديد'}
-              </Link>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {displayedBookings.map((booking) => (
-              <div
-                key={booking.id}
-                className="border border-[#1A1A1A] hover:border-[#CCFF00]/50 bg-[#1A1A1A] p-6 md:p-8 relative transition-all duration-350 rounded-3xl shadow-xl hover:-translate-y-0.5"
-              >
-                {/* Visual Status Indicator Strip on Top right/left depending on translation direction */}
-                <div className="absolute top-0 right-12 rtl:right-auto rtl:left-12 h-1 w-20 bg-[#CCFF00]"></div>
-
-                {/* Grid header details */}
-                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 border-b border-white/10 pb-4 mb-4">
-                  <div>
-                    <div className="flex items-center gap-2.5">
-                      <span className="font-mono text-xs text-black bg-[#CCFF00] px-1.5 py-0.5 font-black uppercase">
-                        {booking.id}
-                      </span>
-                      <span className="font-mono text-[10px] text-white/50">
-                        {new Date(booking.createdAt).toLocaleString()}
-                      </span>
-                    </div>
-
-                    <h3 className="text-xl font-sans font-black uppercase text-white tracking-tight mt-2 flex items-center gap-2">
-                      <span>{language === 'en' ? booking.serviceNameEn : booking.serviceNameAr}</span>
-                      <span className="text-white/40 font-mono text-xs uppercase font-light">
-                        {booking.categoryId === 'maintenance' ? `(Booking Fee)` : `(Expert Consultation)`}
-                      </span>
-                    </h3>
-                  </div>
-
-                  {/* Status Pills inside Black, White, Lime Green constraints */}
-                  <div className="flex flex-wrap gap-2 items-center">
-                    
-                    {/* Urgency Badge */}
-                    <span className={`text-[9px] font-mono uppercase tracking-widest px-2.5 py-1 border font-bold ${
-                      booking.urgency === 'emergency'
-                        ? 'border-[#CCFF00] text-[#CCFF00] bg-[#CCFF00]/10 font-bold'
-                        : booking.urgency === 'urgent'
-                        ? 'border-white text-white font-bold'
-                        : 'border-white/15 text-white/50'
-                    }`}>
-                      {getUrgencyLabel(booking.urgency)}
-                    </span>
-
-                    {/* Status badge with strict visual mappings */}
-                    {booking.status === 'Pending' && (
-                      <span className="text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-white text-white bg-black">
-                        {getStatusLabel(booking.status)}
-                      </span>
-                    )}
-                    {booking.status === 'Confirmed' && (
-                      <span className="text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-[#CCFF00] text-[#CCFF00] bg-black font-extrabold">
-                        {getStatusLabel(booking.status)}
-                      </span>
-                    )}
-                    {booking.status === 'In Progress' && (
-                      <span className="text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 bg-[#CCFF00] text-black font-black">
-                        {getStatusLabel(booking.status)}
-                      </span>
-                    )}
-                    {booking.status === 'Completed' && (
-                      <span className="text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-white/20 text-white/40 line-through">
-                        {getStatusLabel(booking.status)}
-                      </span>
-                    )}
-                    {booking.status === 'Cancelled' && (
-                      <span className="text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-white/10 text-white/30 line-through decoration-white/40">
-                        {getStatusLabel(booking.status)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Parameters Info */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm mb-6">
-                  <div>
-                    <h4 className="text-[10px] font-mono tracking-widest text-[#CCFF00] uppercase mb-1">{t.bookingDate} / {t.bookingTime}</h4>
-                    <p className="font-sans font-bold flex items-center gap-1.5">
-                      <ServiceIcon name="Clock" className="w-4 h-4 text-[#CCFF00]" />
-                      <span>{booking.date}</span>
-                      <span className="text-white/60">({slotTranslations(booking.timeSlot)})</span>
-                    </p>
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <h4 className="text-[10px] font-mono tracking-widest text-[#CCFF00] uppercase mb-1">{t.bookingAddress}</h4>
-                    <p className="font-sans font-light leading-relaxed">{booking.address}</p>
-                  </div>
-                </div>
-
-                {/* Job description detail & attachments */}
-                <div className="space-y-4 pt-4 border-t border-white/5">
-                  <div>
-                    <h4 className="text-[10px] font-mono tracking-widest text-[#CCFF00] uppercase mb-1">{t.bookingDescription}</h4>
-                    <p className="font-sans font-light text-white/80 whitespace-pre-line leading-relaxed text-sm">
-                      {booking.description}
-                    </p>
-                  </div>
-
-                  {/* Attachment thumbnails */}
-                  {booking.photos && booking.photos.length > 0 && (
-                    <div>
-                      <h4 className="text-[10px] font-mono tracking-widest text-[#CCFF00] uppercase mb-2">{t.bookingPhotos}</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {booking.photos.map((photo, i) => (
-                          <div
-                            key={i}
-                            onClick={() => setEnlargedPhoto(photo)}
-                            className="w-14 h-14 border border-white/20 hover:border-[#CCFF00] cursor-pointer relative overflow-hidden transition-all group aspect-square"
-                          >
-                            <img src={photo} alt="Fault Attachment" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                              <span className="text-[8px] font-mono text-[#CCFF00] tracking-tighter uppercase">SCALE</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Tender/fee outline */}
-                  {booking.bookingFee !== undefined && (
-                    <div className="inline-flex items-center gap-3 bg-white/5 px-4 py-2 border border-white/10 font-mono text-xs">
-                      <span className="text-white/50">{t.bookingFeeLabel}:</span>
-                      <span className="text-[#CCFF00] font-bold">{booking.bookingFee} {t.bookingFeeCurrency}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Action Buttons: Cancel and Reschedule */}
-                {(booking.status === 'Pending' || booking.status === 'Confirmed') && (
-                  <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-white/5 select-none justify-end">
-                    {booking.status === 'Pending' && (
-                      <button
-                        onClick={() => updateBookingStatus(booking.id, 'Confirmed')}
-                        className="bg-[#CCFF00] hover:bg-black text-black hover:text-[#CCFF00] border border-[#CCFF00] font-mono text-xs py-2 px-4 transition-all duration-200 cursor-pointer uppercase font-black tracking-wider shadow-lg flex items-center gap-1.5"
-                        title="Simulate dispatch center confirming this booking"
-                      >
-                        <span>⚡ {language === 'en' ? 'SIMULATE CONFIRMATION' : 'محاكاة تأكيد المنسق'}</span>
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => handleOpenReschedule(booking)}
-                      className="border border-[#CCFF00] text-[#CCFF00] hover:bg-[#CCFF00] hover:text-black font-mono text-xs py-2 px-4 transition-all duration-200 cursor-pointer uppercase font-bold"
-                    >
-                      {t.btnReschedule}
-                    </button>
-                    
-                    <button
-                      onClick={() => {
-                        if (confirm(language === 'en' ? 'Are you sure you want to cancel this booking order?' : 'هل أنت متأكد من إلغاء هذا الطلب؟')) {
-                          cancelBooking(booking.id);
-                        }
-                      }}
-                      className="border border-red-500 text-red-500 hover:bg-red-500 hover:text-white font-mono text-xs py-2 px-4 transition-all duration-200 cursor-pointer uppercase font-bold"
-                    >
-                      {t.btnCancelBooking}
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12">
+        {error && (
+          <div className="mb-8 p-4 bg-black border border-red-500 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+            <p className="font-mono text-xs text-white">{error}</p>
           </div>
         )}
-      </main>
 
-      {/* PHOTO LIGHTBOX DIALOG OVERLAY */}
-      {enlargedPhoto && (
-        <div
-          onClick={() => setEnlargedPhoto(null)}
-          className="fixed inset-0 bg-black/95 flex items-center justify-center p-4 z-50 cursor-zoom-out backdrop-blur-md"
-        >
-          <div className="max-w-4xl max-h-[85vh] relative border-2 border-[#CCFF00]">
-            <img src={enlargedPhoto} alt="Enlarged File View" className="object-contain max-h-[80vh] w-auto max-w-full" referrerPolicy="no-referrer" />
-            <p className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/80 font-mono text-[9px] text-[#CCFF00] px-3 py-1 uppercase tracking-widest border border-[#CCFF00]/40">
-              {language === 'en' ? 'CLICK OUTSIDE TO SHUT' : 'انقر في أي مكان للإغلاق'}
+        {loading ? (
+          <div className="py-20 text-center text-gray-500 font-mono text-xs uppercase animate-pulse">
+            DISPATCHING SECURED METRIC SERVERS...
+          </div>
+        ) : (
+          <div className="space-y-12">
+            
+            {/* 1. Upcoming active maintenance actions */}
+            <div>
+              <div className="border-b border-gray-900 pb-3 mb-6 flex justify-between items-center">
+                <span className="font-sans text-sm font-black tracking-wider uppercase text-white flex items-center gap-2">
+                  <Play className="w-4 h-4 text-lime-primary" />
+                  {t('activeRequests')}
+                </span>
+                <span className="font-mono text-xs text-gray-500 bg-neutral-950 px-2 py-0.5 border border-zinc-900">
+                  {upcomingBookings.length} {language === 'ar' ? 'طلب نشط' : 'JOBS'}
+                </span>
+              </div>
+
+              {upcomingBookings.length === 0 ? (
+                <div className="p-12 text-center border border-gray-900 bg-black">
+                  <CalendarDays className="w-12 h-12 text-zinc-800 mx-auto mb-3" />
+                  <p className="font-mono text-xs text-gray-500 uppercase">
+                    {t('noBookings')}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {upcomingBookings.map(bk => (
+                    <div
+                      key={bk.id}
+                      onClick={() => setSelectedBooking(bk)}
+                      className="group bg-black hover:bg-neutral-950 border border-gray-900 hover:border-lime-primary transition-all p-5 relative cursor-pointer"
+                    >
+                      <div className="absolute top-4 right-4">
+                        <span className={`px-2 py-0.5 text-[9px] uppercase tracking-wider ${getStatusStyle(bk.status)}`}>
+                          {bk.status}
+                        </span>
+                      </div>
+
+                      <div className="flex gap-4 items-start mb-6">
+                        <span className="p-3 bg-zinc-950 text-lime-primary border border-gray-900">
+                          <ServiceIcon id={bk.service_id} className="w-5 h-5" />
+                        </span>
+                        <div>
+                          <span className="font-mono text-[9px] text-gray-500 uppercase tracking-widest block leading-none">
+                            {bk.id}
+                          </span>
+                          <h4 className="font-sans text-lg font-bold text-white uppercase mt-1">
+                            {language === 'ar' ? bk.service_name_ar : bk.service_name_en}
+                          </h4>
+                          <span className="font-mono text-[9px] text-zinc-400 bg-neutral-900 px-1.5 py-0.5 mt-1 inline-block uppercase tracking-wide">
+                            {bk.category_id === 'home_maintenance' ? t('homeMaintenance') : t('profConsultations')}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 font-mono text-[11px] text-gray-400 mb-6 bg-zinc-950 p-3 border border-zinc-900">
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-lime-primary" />
+                          <span>{bk.date}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-lime-primary" />
+                          <span className="uppercase">{bk.time_slot}</span>
+                        </div>
+                        <div className="col-span-2 flex items-start gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-lime-primary shrink-0 mt-0.5" />
+                          <span className="truncate">{bk.address}</span>
+                        </div>
+                      </div>
+
+                      {/* Controls inside Card (Pending only) */}
+                      {bk.status === 'Pending' && (
+                        <div className="flex gap-2 pt-4 border-t border-gray-900">
+                          <button
+                            onClick={(e) => triggerRescheduleModal(bk, e)}
+                            className="flex-1 py-2 border border-gray-800 hover:border-lime-primary text-[10px] font-mono font-bold uppercase transition-colors text-white cursor-pointer"
+                          >
+                            {t('reschedule')}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCancelBooking(bk.id);
+                            }}
+                            className="flex-1 py-2 border border-red-950 hover:bg-red-950 hover:text-white text-red-500 text-[10px] font-mono font-bold uppercase transition-colors cursor-pointer"
+                          >
+                            {t('cancel')}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 2. Historic completed or cancelled requests */}
+            <div>
+              <div className="border-b border-gray-900 pb-3 mb-6 flex justify-between items-center">
+                <span className="font-sans text-sm font-black tracking-wider uppercase text-gray-500 flex items-center gap-2">
+                  <History className="w-4 h-4 text-gray-500" />
+                  {t('pastBookings')}
+                </span>
+                <span className="font-mono text-xs text-gray-550 bg-neutral-950 px-2 py-0.5 border border-zinc-900">
+                  {pastBookings.length} {language === 'ar' ? 'طلب سابق' : 'CLEARED'}
+                </span>
+              </div>
+
+              {pastBookings.length === 0 ? (
+                <div className="p-12 text-center border border-gray-950">
+                  <p className="font-mono text-xs text-gray-650 uppercase">
+                    {language === 'ar' ? 'لا توجد حجوزات منتهية في السجل.' : 'NO PASSED ACTIONS FILED'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {pastBookings.map(bk => (
+                    <div
+                      key={bk.id}
+                      onClick={() => setSelectedBooking(bk)}
+                      className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 bg-black hover:bg-neutral-950 border border-gray-900 cursor-pointer transition-colors gap-4"
+                    >
+                      <div className="flex gap-3 items-center">
+                        <span className="p-2.5 bg-neutral-950 text-gray-500 border border-gray-900">
+                          <ServiceIcon id={bk.service_id} className="w-4 h-4" />
+                        </span>
+                        <div>
+                          <span className="font-mono text-[9px] text-gray-600 uppercase block select-none">
+                            {bk.id}
+                          </span>
+                          <h5 className="font-sans text-sm font-extrabold text-white uppercase mt-0.5">
+                            {language === 'ar' ? bk.service_name_ar : bk.service_name_en}
+                          </h5>
+                          <span className="font-mono text-[9px] text-gray-500">
+                            {bk.date} • {bk.time_slot}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        {bk.cost_items && bk.cost_items.length > 0 && (
+                          <span className="text-[10px] font-mono text-lime-primary bg-zinc-950 border border-zinc-950 px-2 py-0.5 uppercase tracking-wide">
+                            {language === 'ar' ? 'فاتورة صادرة' : 'INVOICED'}
+                          </span>
+                        )}
+                        <span className={`px-2 py-0.5 text-[9px] uppercase tracking-wider ${getStatusStyle(bk.status)}`}>
+                          {bk.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+          </div>
+        )}
+      </div>
+
+      {/* ==========================================
+          OVERLAY A: GENERAL REQUEST DETAILED VIEW
+         ========================================== */}
+      {selectedBooking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xs overflow-y-auto">
+          <div className="w-full max-w-xl bg-black border border-gray-900 p-6 sm:p-8 relative">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-lime-primary"></div>
+            
+            {/* Close Button */}
+            <button
+              onClick={() => setSelectedBooking(null)}
+              className="absolute top-4 right-4 p-1 bg-gray-950 text-gray-400 hover:text-white border border-gray-800 hover:border-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <span className="font-mono text-[9px] text-lime-primary px-2 py-0.5 bg-zinc-950 border border-zinc-900 uppercase">
+              {selectedBooking.id}
+            </span>
+
+            <h3 className="font-sans text-2xl font-black text-white uppercase mt-3 mb-1">
+              {language === 'ar' ? selectedBooking.service_name_ar : selectedBooking.service_name_en}
+            </h3>
+            
+            <p className="font-mono text-[10px] text-gray-500 uppercase pb-4 border-b border-gray-900 mb-6">
+              {selectedBooking.category_id === 'home_maintenance' ? t('homeMaintenance') : t('profConsultations')}
             </p>
+
+            <div className="space-y-4 text-xs font-mono">
+              <div className="p-3.5 bg-zinc-950 border border-zinc-900 text-gray-300">
+                <span className="text-[10px] text-gray-500 uppercase tracking-widest block mb-1">{t('issueDescription')}</span>
+                <p className="leading-relaxed whitespace-pre-line text-white">{selectedBooking.description}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-neutral-950 border border-gray-900">
+                  <span className="text-[9px] text-gray-500 uppercase block">{t('preferredDate')}</span>
+                  <span className="text-white font-bold block mt-1">{selectedBooking.date}</span>
+                </div>
+                <div className="p-3 bg-neutral-950 border border-gray-900">
+                  <span className="text-[9px] text-gray-500 uppercase block">{t('preferredTime')}</span>
+                  <span className="text-white font-bold block mt-1 uppercase">{selectedBooking.time_slot}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-neutral-950 border border-gray-900">
+                  <span className="text-[9px] text-gray-500 uppercase block">{t('urgencyLevel')}</span>
+                  <span className="text-lime-primary font-bold block mt-1 uppercase">
+                    {selectedBooking.urgency === 'Normal' ? t('normal') : selectedBooking.urgency === 'Urgent' ? t('urgent') : t('emergency')}
+                  </span>
+                </div>
+                <div className="p-3 bg-neutral-950 border border-gray-900">
+                  <span className="text-[9px] text-gray-500 uppercase block">{t('status')}</span>
+                  <span className="text-white font-bold block mt-1 uppercase">{selectedBooking.status}</span>
+                </div>
+              </div>
+
+              {/* Physical Adr */}
+              <div className="p-3 bg-neutral-950 border border-gray-900">
+                <span className="text-[9px] text-gray-500 uppercase block">{t('serviceAddress')}</span>
+                <span className="text-white block mt-1 leading-relaxed">{selectedBooking.address}</span>
+              </div>
+
+              {/* Display File Attachment Previews */}
+              {selectedBooking.photos && selectedBooking.photos.length > 0 && (
+                <div>
+                  <span className="text-[10px] text-gray-500 uppercase tracking-widest block mb-2">{t('photoUpload')}</span>
+                  <div className="flex gap-2">
+                    {selectedBooking.photos.map((ph, index) => (
+                      <div key={index} className="w-20 h-20 border border-gray-800 bg-zinc-900">
+                        <img
+                          src={ph}
+                          onClick={() => window.open(ph)} // Fallback view on click
+                          alt="attached"
+                          className="w-full h-full object-cover cursor-pointer"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Cost items info if completed/invoiced */}
+              {selectedBooking.cost_items && selectedBooking.cost_items.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-gray-900">
+                  <span className="text-[10px] text-lime-primary uppercase tracking-widest block mb-2">{t('costsReceipt')}</span>
+                  <table className="w-full text-left text-[10px] font-mono border-collapse">
+                    <thead>
+                      <tr className="border-b border-gray-800 text-gray-500 uppercase">
+                        <th className="py-1">{t('itemName')}</th>
+                        <th className="py-1 text-center">{t('quantity')}</th>
+                        <th className="py-1 text-right">{t('lineTotal')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedBooking.cost_items.map((it) => (
+                        <tr key={it.id} className="border-b border-gray-900 text-white">
+                          <td className="py-1.5">{it.description}</td>
+                          <td className="py-1.5 text-center">{it.quantity}</td>
+                          <td className="py-1.5 text-right font-bold text-lime-primary">${it.total}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-900 text-[11px] font-bold text-white uppercase">
+                    <span>{t('grandTotal')}</span>
+                    <span className="bg-lime-primary text-black px-2 py-0.5">
+                      ${selectedBooking.cost_items.reduce((s, c) => s + c.total, 0) + (selectedBooking.booking_fee || 0)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* If pending booking, cancel/reschedule option */}
+            {selectedBooking.status === 'Pending' && (
+              <div className="flex gap-2.5 mt-8 pt-4 border-t border-gray-900">
+                <button
+                  onClick={(e) => triggerRescheduleModal(selectedBooking, e)}
+                  className="flex-1 py-3 border border-gray-800 hover:border-lime-primary text-xs font-mono font-bold uppercase transition-colors text-white cursor-pointer"
+                >
+                  {t('reschedule')}
+                </button>
+                <button
+                  onClick={() => handleCancelBooking(selectedBooking.id)}
+                  className="flex-1 py-3 border border-red-950 hover:bg-red-950 hover:text-white text-red-500 text-xs font-mono font-bold uppercase transition-colors cursor-pointer"
+                >
+                  {t('cancel')}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* RESCHEDULE MODAL POPUP */}
-      {selectedRescheduleBooking && (
-        <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className="w-full max-w-md border-2 border-[#CCFF00] bg-black p-8 relative">
+      {/* ==========================================
+          OVERLAY B: RESCHEDULE SUB-VIEW FORM
+         ========================================== */}
+      {targetReschedule && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-black border border-gray-900 p-8 relative">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-lime-primary"></div>
+            
+            {/* Close Button */}
             <button
-              onClick={() => setSelectedRescheduleBooking(null)}
-              className="absolute top-4 right-4 rtl:right-auto rtl:left-4 text-white hover:text-[#CCFF00] p-1 uppercase font-mono tracking-widest text-xs flex items-center gap-1 cursor-pointer"
+              onClick={() => setTargetReschedule(null)}
+              className="absolute top-4 right-4 p-1 bg-gray-950 text-gray-450 hover:text-white border border-gray-850 hover:border-white"
             >
-              <span>{language === 'en' ? 'CLOSE' : 'إغلاق'}</span>
-              <ServiceIcon name="X" className="w-4 h-4" />
+              <X className="w-4 h-4" />
             </button>
 
-            {/* Neon flanged details */}
-            <div className="absolute -top-[2px] -left-[2px] w-3 h-3 bg-[#CCFF00]"></div>
-            <div className="absolute -bottom-[2px] -right-[2px] w-3 h-3 bg-[#CCFF00]"></div>
+            <h3 className="font-sans text-xl font-bold uppercase text-white tracking-tight mb-2">
+              {t('rescheduleTitle')}
+            </h3>
+            <span className="font-mono text-[9px] text-gray-500 uppercase block mb-6 px-1 py-0.5 bg-zinc-950 border border-zinc-900 w-max">
+              {targetReschedule.id}
+            </span>
 
-            <div className="border-b border-[#CCFF00]/25 pb-4 mb-6 mt-4">
-              <span className="font-mono text-[10px] text-[#CCFF00] uppercase tracking-widest">RESCHEDULER MODULE</span>
-              <h3 className="text-xl font-sans font-black uppercase text-white tracking-tight mt-1">
-                {t.modalRescheduleTitle}
-              </h3>
-            </div>
-
-            <form onSubmit={handleSaveReschedule} className="space-y-6">
-              {/* Date */}
+            <form onSubmit={submitReschedule} className="space-y-5">
+              {/* Date selection */}
               <div>
-                <label className="block text-xs font-mono tracking-widest uppercase mb-2 text-[#CCFF00]">
-                  {t.fieldPreferredDate} *
+                <label className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">
+                  {t('preferredDate')}
                 </label>
                 <input
                   type="date"
+                  value={newDate}
+                  onChange={e => setNewDate(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-black border border-gray-800 text-white rounded-none focus:outline-none focus:border-lime-primary font-mono text-sm"
                   required
                   min={new Date().toISOString().split('T')[0]}
-                  value={newDate}
-                  onChange={(e) => setNewDate(e.target.value)}
-                  className="w-full bg-black border border-white/20 focus:border-[#CCFF00] text-white px-4 py-3 text-sm rounded-none tracking-wide focus:outline-none transition-all font-sans"
                 />
               </div>
 
-              {/* Time slots */}
+              {/* Time slot */}
               <div>
-                <label className="block text-xs font-mono tracking-widest uppercase mb-2 text-[#CCFF00]">
-                  {t.fieldTimeSlot} *
+                <label className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">
+                  {t('preferredTime')}
                 </label>
-                <div className="space-y-2">
-                  {[
-                    { value: 'morning', label: t.slotMorning },
-                    { value: 'afternoon', label: t.slotAfternoon },
-                    { value: 'evening', label: t.slotEvening }
-                  ].map((slot) => (
-                    <label
-                      key={slot.value}
-                      className={`flex items-center gap-3 p-3 border cursor-pointer transition-all ${
-                        newSlot === slot.value
-                          ? 'border-[#CCFF00] bg-[#CCFF00]/5 text-[#CCFF00] font-bold'
-                          : 'border-white/10 hover:border-white/20'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="reschedSlot"
-                        checked={newSlot === slot.value}
-                        onChange={() => setNewSlot(slot.value as TimeSlot)}
-                        className="accent-[#CCFF00]"
-                      />
-                      <span className="text-xs font-mono uppercase tracking-wider">{slot.label}</span>
-                    </label>
-                  ))}
-                </div>
+                <select
+                  value={newTimeSlot}
+                  onChange={e => setNewTimeSlot(e.target.value as any)}
+                  className="w-full px-4 py-2.5 bg-black border border-gray-800 text-white rounded-none focus:outline-none focus:border-lime-primary font-mono text-sm uppercase"
+                >
+                  <option value="Morning">{t('morning')}</option>
+                  <option value="Afternoon">{t('afternoon')}</option>
+                  <option value="Evening">{t('evening')}</option>
+                </select>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-4 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedRescheduleBooking(null)}
-                  className="flex-1 border-2 border-white/25 hover:border-white text-white font-mono text-xs tracking-wider py-3 uppercase cursor-pointer text-center"
-                >
-                  {language === 'en' ? 'ABORT' : 'إلغاء'}
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 bg-[#CCFF00] border-2 border-[#CCFF00] text-black hover:bg-black hover:text-[#CCFF00] font-mono text-xs tracking-wider py-3 font-bold uppercase cursor-pointer text-center"
-                >
-                  {t.btnSaveReschedule}
-                </button>
-              </div>
+              {/* Trigger */}
+              <button
+                type="submit"
+                disabled={rescheduleSubmitting}
+                className="w-full py-4 mt-2 bg-lime-primary text-black hover:bg-white text-xs font-mono font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <span>{rescheduleSubmitting ? 'PROCESSING CHANGES...' : t('saveBtn')}</span>
+              </button>
             </form>
           </div>
         </div>
       )}
-
-      {/* FOOTER */}
-      <footer className="border-t border-[#CCFF00]/10 bg-black p-4 text-center">
-        <p className="font-mono text-[10px] text-white/40 tracking-wider">
-          © {new Date().getFullYear()} {t.appName} GLOBAL. CONSOLIDATED CONSOLE CONTROL.
-        </p>
-      </footer>
     </div>
   );
 };
-export default Dashboard;

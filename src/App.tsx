@@ -3,134 +3,95 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect } from 'react';
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AppProvider } from './context/AppContext';
-import Home from './pages/Home';
-import Auth from './pages/Auth';
-import BookingFlow from './pages/BookingFlow';
-import Dashboard from './pages/Dashboard';
-import AdminDashboard from './pages/AdminDashboard';
-import { ToastNotifier } from './components/ToastNotifier';
+import React from 'react';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { LanguageProvider } from './context/LanguageContext';
+import { Navbar } from './components/Navbar';
+import { Home } from './pages/Home';
+import { Login } from './pages/Login';
+import { Signup } from './pages/Signup';
+import { Dashboard } from './pages/Dashboard';
+import { Admin } from './pages/Admin';
 
-export default function App() {
-  // Global Drag-to-Scroll (Grab-and-Slide) support
-  useEffect(() => {
-    let isDragging = false;
-    let startX = 0;
-    let startY = 0;
-    let scrollLeft = 0;
-    let scrollTop = 0;
-    let activeContainer: HTMLElement | null = null;
+// Route guards to protect secure customer segments
+const CustomerRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="min-h-screen bg-black text-white flex items-center justify-center font-mono text-xs uppercase animate-pulse">authorizing node...</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+};
 
-    const handleMouseDown = (e: MouseEvent) => {
-      // Exclude clicks on interactive elements (inputs, options, dropdowns, links, buttons, details, components)
-      const target = e.target as HTMLElement;
-      if (!target) return;
+// Route guards to protect administrative segments
+const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, profile, loading } = useAuth();
+  if (loading) return <div className="min-h-screen bg-black text-white flex items-center justify-center font-mono text-xs uppercase animate-pulse">verifying privilege index...</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  if (profile && profile.role !== 'admin' && profile.role !== 'staff') {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+};
 
-      const isInteractive = 
-        target.closest('button') ||
-        target.closest('input') ||
-        target.closest('select') ||
-        target.closest('textarea') ||
-        target.closest('a') ||
-        target.closest('[role="button"]') ||
-        target.isContentEditable;
-
-      if (isInteractive) return;
-
-      // Find the closest parent that handles scrolling if there is a nested scroller
-      let parent: HTMLElement | null = target;
-      activeContainer = null;
-      while (parent && parent !== document.body && parent !== document.documentElement) {
-        const style = window.getComputedStyle(parent);
-        const isScrollableX = (parent.scrollWidth > parent.clientWidth) && (style.overflowX === 'auto' || style.overflowX === 'scroll');
-        const isScrollableY = (parent.scrollHeight > parent.clientHeight) && (style.overflowY === 'auto' || style.overflowY === 'scroll');
-        if (isScrollableX || isScrollableY) {
-          activeContainer = parent;
-          break;
-        }
-        parent = parent.parentElement;
-      }
-
-      isDragging = true;
-      startX = e.clientX;
-      startY = e.clientY;
-
-      if (activeContainer) {
-        scrollLeft = activeContainer.scrollLeft;
-        scrollTop = activeContainer.scrollTop;
-      } else {
-        scrollLeft = window.scrollX;
-        scrollTop = window.scrollY;
-      }
-
-      document.body.style.cursor = 'grabbing';
-      document.body.style.userSelect = 'none'; // Avoid highlighting text during viewport grab drag
-    };
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging) return;
-
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-
-      if (activeContainer) {
-        activeContainer.scrollLeft = scrollLeft - dx;
-        activeContainer.scrollTop = scrollTop - dy;
-      } else {
-        window.scrollTo(scrollLeft - dx, scrollTop - dy);
-      }
-    };
-
-    const handleMouseUp = () => {
-      if (!isDragging) return;
-      isDragging = false;
-      document.body.style.cursor = 'grab';
-      document.body.style.userSelect = '';
-      activeContainer = null;
-    };
-
-    window.addEventListener('mousedown', handleMouseDown);
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      window.removeEventListener('mousedown', handleMouseDown);
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, []);
-
+function AppContent() {
   return (
-    <AppProvider>
-      <HashRouter>
-        <Routes>
-          {/* Main Browsing Catalog Route */}
-          <Route path="/" element={<Home />} />
-          
-          {/* Customer login/register */}
-          <Route path="/login" element={<Auth isAdmin={false} />} />
-          <Route path="/signup" element={<Auth isAdmin={false} />} />
-          
-          {/* Admin dedicated login */}
-          <Route path="/admin/login" element={<Auth isAdmin={true} />} />
-          
-          {/* Service Booking Flow */}
-          <Route path="/book/:serviceId" element={<BookingFlow />} />
-          
-          {/* Customer Workspace Dashboard */}
-          <Route path="/dashboard" element={<Dashboard />} />
-          
-          {/* Admin Dispatcher Panel - checks if admin inside page */}
-          <Route path="/admin" element={<AdminDashboard />} />
+    <Router>
+      <div id="shed-application-root" className="min-h-screen bg-black text-white selection:bg-lime-primary selection:text-black">
+        {/* Navigation Layer */}
+        <Navbar />
 
-          {/* Fallback routes */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </HashRouter>
-      <ToastNotifier />
-    </AppProvider>
+        {/* View Routing Matrix */}
+        <main id="view-space-wrapper">
+          <Routes>
+            <Route path="/" element={<Home view="landing" />} />
+            <Route path="/maintenance" element={<Home view="maintenance" />} />
+            <Route path="/consultations" element={<Home view="consultations" />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            
+            {/* Customer Segments */}
+            <Route 
+              path="/dashboard" 
+              element={
+                <CustomerRoute>
+                  <Dashboard />
+                </CustomerRoute>
+              } 
+            />
+
+            {/* Administrations / Staff Workspace */}
+            <Route 
+              path="/admin" 
+              element={
+                <AdminRoute>
+                  <Admin />
+                </AdminRoute>
+              } 
+            />
+
+            {/* General Fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </main>
+
+        {/* Humid, low-risk, elegant footer */}
+        <footer className="bg-black text-zinc-650 font-mono text-[9px] py-8 text-center border-t border-gray-950 no-print">
+          <div className="max-w-7xl mx-auto px-4">
+            <p className="uppercase tracking-widest font-bold">SHED MANAGEMENT UTILITY SYSTEM</p>
+            <p className="mt-1 uppercase text-[8px] tracking-wide opacity-50">© 2026 SHED CORP • ALL SYSTEMS OPERATIONAL</p>
+          </div>
+        </footer>
+      </div>
+    </Router>
   );
 }
 
+export default function App() {
+  return (
+    <AuthProvider>
+      <LanguageProvider>
+        <AppContent />
+      </LanguageProvider>
+    </AuthProvider>
+  );
+}
