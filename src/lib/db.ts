@@ -31,7 +31,7 @@ const SEED_SERVICES: Service[] = [
   { id: 'mechanical', name_en: 'Mechanical', name_ar: 'الميكانيكا', category: 'home_maintenance', booking_fee: 25, description_en: 'Mechanical systems and maintenance', description_ar: 'الأنظمة الميكانيكية والصيانة', active: true },
   { id: 'gardening', name_en: 'Gardening', name_ar: 'البستنة', category: 'home_maintenance', booking_fee: 25, description_en: 'Garden design and maintenance', description_ar: 'تصميم الحدائق وصيانتها', active: true },
   { id: 'insulation', name_en: 'Insulation', name_ar: 'العزل', category: 'home_maintenance', booking_fee: 25, description_en: 'Thermal and waterproofing insulation', description_ar: 'العزل الحراري والمائي', active: true },
-  { id: 'home-inspection', name_en: 'Full Home Inspection', name_ar: 'فحص المنزل الكامل', category: 'home_maintenance', booking_fee: 25, description_en: 'Comprehensive inspection of the entire home', description_ar: 'فحص شامل للمنزل بالكامل', active: true },
+  { id: 'home-inspection', name_en: 'Full Home Inspection', name_ar: 'فحص المنزل الكامل', category: 'home_maintenance', booking_fee: 40, description_en: 'Comprehensive inspection of the entire home', description_ar: 'فحص شامل للمنزل بالكامل', active: true },
   { id: 'mech-engineer', name_en: 'Mechanical Engineer', name_ar: 'مهندس ميكانيكي', category: 'professional_consultations', booking_fee: null, description_en: 'Professional mechanical engineering consultation', description_ar: 'استشارة هندسية ميكانيكية متخصصة', active: true },
   { id: 'contractor', name_en: 'Contractor', name_ar: 'مقاول', category: 'professional_consultations', booking_fee: null, description_en: 'Contracting and project management consultation', description_ar: 'استشارة مقاولات وإدارة مشاريع', active: true },
   { id: 'architect', name_en: 'Architect', name_ar: 'مهندس معماري', category: 'professional_consultations', booking_fee: null, description_en: 'Architectural design and planning consultation', description_ar: 'استشارة تصميم معماري وتخطيط', active: true },
@@ -50,7 +50,6 @@ const DEFAULT_MOCK_USERS = [
   }
 ];
 
-// Helper to secure initial local storage seeding
 function getLocalStorageItem<T>(key: string, defaultValue: T): T {
   const data = localStorage.getItem(key);
   if (!data) {
@@ -68,19 +67,16 @@ function setLocalStorageItem<T>(key: string, val: T): void {
   localStorage.setItem(key, JSON.stringify(val));
 }
 
-// Global active in-memory / local storage states
 export interface MockUserRecord extends UserProfile {
   email: string;
   password?: string;
 }
 
-// Seed Mock Stores
 getLocalStorageItem<Service[]>('shed_services', SEED_SERVICES);
 getLocalStorageItem<MockUserRecord[]>('shed_users', DEFAULT_MOCK_USERS);
 getLocalStorageItem<Booking[]>('shed_bookings', []);
 getLocalStorageItem<Receipt[]>('shed_receipts', []);
 
-// Database helpers
 const db = {
   // SERVICES
   getServices: async (): Promise<Service[]> => {
@@ -127,9 +123,6 @@ const db = {
         .from('users')
         .select('*');
       if (!error && data) {
-        // We'll map them. In real Supabase, we cannot fetch emails of other users from public.users table unless stored there.
-        // Let's fallback to returning the mock user registry or merge if possible.
-        // For convenience in admin view, let's merge with the email values if available in public.users or return combined payload.
         return data.map(u => ({
           id: u.id,
           full_name: u.full_name || 'User',
@@ -144,7 +137,6 @@ const db = {
   },
 
   updateUserRole: async (userId: string, role: UserRole): Promise<void> => {
-    // Check if it exists in DB
     if (isSupabaseConfigured && supabase) {
       const { error } = await supabase
         .from('users')
@@ -153,7 +145,6 @@ const db = {
       if (!error) return;
     }
     const users = getLocalStorageItem<MockUserRecord[]>('shed_users', DEFAULT_MOCK_USERS);
-    // Ensure we don't remove last admin
     if (role !== 'admin') {
       const currentRole = users.find(u => u.id === userId)?.role;
       if (currentRole === 'admin') {
@@ -177,19 +168,38 @@ const db = {
     setLocalStorageItem('shed_users', updated);
   },
 
-  // BOOKINGS
+  // BOOKINGS - FIXED: admin/staff fetch ALL bookings without filter
   getBookings: async (userRole: UserRole, userId: string): Promise<Booking[]> => {
     if (isSupabaseConfigured && supabase) {
-      let query = supabase.from('bookings').select('*');
-      if (userRole === 'customer') {
-        query = query.eq('user_id', userId);
-      }
-      const { data, error } = await query.order('created_at', { ascending: false });
-      if (!error && data) {
-        return data.map(b => ({
-          ...b,
-          cost_items: Array.isArray(b.cost_items) ? b.cost_items : JSON.parse(b.cost_items || '[]')
-        })) as Booking[];
+      if (userRole === 'admin' || userRole === 'staff') {
+        // Admin and staff: fetch ALL bookings with no user filter
+        const { data, error } = await supabase
+          .from('bookings')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (error) {
+          console.error('Admin fetch bookings error:', error);
+        } else if (data) {
+          return data.map(b => ({
+            ...b,
+            cost_items: Array.isArray(b.cost_items) ? b.cost_items : JSON.parse(b.cost_items || '[]')
+          })) as Booking[];
+        }
+      } else {
+        // Customers: only their own bookings
+        const { data, error } = await supabase
+          .from('bookings')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
+        if (error) {
+          console.error('Customer fetch bookings error:', error);
+        } else if (data) {
+          return data.map(b => ({
+            ...b,
+            cost_items: Array.isArray(b.cost_items) ? b.cost_items : JSON.parse(b.cost_items || '[]')
+          })) as Booking[];
+        }
       }
     }
     const bookings = getLocalStorageItem<Booking[]>('shed_bookings', []);
@@ -233,7 +243,11 @@ const db = {
           cost_items: JSON.stringify(newBooking.cost_items),
           internal_notes: newBooking.internal_notes
         });
-      if (!error) return newBooking;
+      if (error) {
+        console.error('Create booking error:', error);
+      } else {
+        return newBooking;
+      }
     }
 
     const bookings = getLocalStorageItem<Booking[]>('shed_bookings', []);
@@ -281,6 +295,23 @@ const db = {
     }
     const bookings = getLocalStorageItem<Booking[]>('shed_bookings', []);
     const updated = bookings.map(b => b.id === bookingId ? { ...b, cost_items: costItems, internal_notes: internalNotes } : b);
+    setLocalStorageItem('shed_bookings', updated);
+  },
+
+  deleteBooking: async (bookingId: string): Promise<void> => {
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase
+        .from('bookings')
+        .delete()
+        .eq('id', bookingId);
+      if (error) {
+        console.error('Delete booking error:', error);
+        throw new Error('Failed to delete booking');
+      }
+      return;
+    }
+    const bookings = getLocalStorageItem<Booking[]>('shed_bookings', []);
+    const updated = bookings.filter(b => b.id !== bookingId);
     setLocalStorageItem('shed_bookings', updated);
   },
 
