@@ -1,6 +1,8 @@
 {
-  "name": "SHED",
-  "description": "Internal bilingual home maintenance services platform for SHED.",
+  "name": "SHED Services",
+  "description": "On-demand maintenance, consulting, and heavy division contracting portal.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

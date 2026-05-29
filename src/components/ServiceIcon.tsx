@@ -1,20 +1,18 @@
 import React from 'react';
 import { 
   Wrench, 
-  Bolt, 
-  Paintbrush, 
-  LayoutGrid, 
-  Hammer, 
+  Zap, 
   Wind, 
-  Settings, 
-  Leaf, 
-  Shield, 
-  ClipboardCheck, 
-  Compass, 
-  HardHat, 
-  Palette,
-  Construction,
-  Briefcase
+  Cpu, 
+  Hammer, 
+  Brush, 
+  Key, 
+  Sparkles, 
+  Bug, 
+  Tv, 
+  Flower, 
+  Boxes,
+  Activity
 } from 'lucide-react';
 
 interface Props {
@@ -26,37 +24,29 @@ export const ServiceIcon: React.FC<Props> = ({ id, className = "w-6 h-6" }) => {
   switch (id) {
     case 'plumbing':
       return <Wrench className={className} />;
-    case 'electricity':
-      return <Bolt className={className} />;
-    case 'paint':
-      return <Paintbrush className={className} />;
-    case 'aluminum':
-      return <Construction className={className} />;
-    case 'tiling':
-      return <LayoutGrid className={className} />;
-    case 'woodwork':
-      return <Hammer className={className} />;
-    case 'steelwork':
-      return <Shield className={className} />;
-    case 'ac':
+    case 'electrical':
+      return <Zap className={className} />;
+    case 'hvac':
       return <Wind className={className} />;
-    case 'mechanical':
-      return <Settings className={className} />;
+    case 'appliance-repair':
+      return <Cpu className={className} />;
+    case 'carpenter':
+      return <Hammer className={className} />;
+    case 'painting':
+      return <Brush className={className} />;
+    case 'locksmith':
+      return <Key className={className} />;
+    case 'cleaning':
+      return <Sparkles className={className} />;
+    case 'pest-control':
+      return <Bug className={className} />;
+    case 'smart-home':
+      return <Tv className={className} />;
     case 'gardening':
-      return <Leaf className={className} />;
-    case 'insulation':
-      return <Shield className={className} />;
-    case 'home-inspection':
-      return <ClipboardCheck className={className} />;
-    case 'mech-engineer':
-      return <Settings className={className} />;
-    case 'contractor':
-      return <HardHat className={className} />;
-    case 'architect':
-      return <Compass className={className} />;
-    case 'interior-design':
-      return <Palette className={className} />;
+      return <Flower className={className} />;
+    case 'handyman':
+      return <Boxes className={className} />;
     default:
-      return <Briefcase className={className} />;
+      return <Activity className={className} />;
   }
 };

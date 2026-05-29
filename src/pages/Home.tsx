@@ -1,26 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import db, { SEED_SERVICES } from '../lib/db';
-import { Service, Booking } from '../types';
+import { Service } from '../types';
+import { Navbar } from '../components/Navbar';
 import { ServiceIcon } from '../components/ServiceIcon';
+import { BackgroundVectors } from '../components/BackgroundVectors';
+// @ts-ignore
+import shedLogo from '../assets/shed-logo.png';
 import { 
-  X, 
-  MapPin, 
-  Clock, 
-  Calendar, 
-  AlertTriangle, 
-  Plus, 
-  Upload, 
-  Check, 
-  CheckSquare, 
-  FileText,
-  Building,
-  ArrowRight,
-  ArrowLeft,
-  Sparkles,
-  Info
+  ArrowRight, 
+  ArrowLeft, 
+  Info, 
+  HardHat, 
+  ShieldCheck, 
+  AlertTriangle,
+  Calendar,
+  Clock,
+  MapPin,
+  ClipboardList,
+  Camera
 } from 'lucide-react';
 
 interface HomeProps {
@@ -31,13 +31,32 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
   const { user, profile } = useAuth();
   const { language, t } = useLanguage();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // Active state repositories
   const [services, setServices] = useState<Service[]>(SEED_SERVICES);
   const [activeCategory, setActiveCategory] = useState<'home_maintenance' | 'professional_consultations'>('home_maintenance');
   const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [logoFailed, setLogoFailed] = useState(false);
 
-  // Synchronize category based on the routed view
+  // Booking Form States
+  const [bookingService, setBookingService] = useState<Service | null>(null);
+  const [prefDate, setPrefDate] = useState('');
+  const [prefTimeSlot, setPrefTimeSlot] = useState<'Morning' | 'Afternoon' | 'Evening'>('Morning');
+  const [urgency, setUrgency] = useState<'Normal' | 'Urgent' | 'Emergency'>('Normal');
+  const [address, setAddress] = useState('');
+  const [issueDesc, setIssueDesc] = useState('');
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [photoInput, setPhotoInput] = useState('');
+  const [isAck, setIsAck] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [successInfo, setSuccessInfo] = useState('');
+
+  // Sychronize database with services
+  useEffect(() => {
+    db.getServices().then(setServices);
+  }, []);
+
+  // Sync state if category view is directly routed
   useEffect(() => {
     if (view === 'maintenance') {
       setActiveCategory('home_maintenance');
@@ -45,53 +64,55 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
       setActiveCategory('professional_consultations');
     }
   }, [view]);
-  
-  // Handlers for the Booking Flow
-  const [bookingService, setBookingService] = useState<Service | null>(null);
-  
-  // Booking Form State
-  const [prefDate, setPrefDate] = useState('');
-  const [prefTimeSlot, setPrefTimeSlot] = useState<'Morning' | 'Afternoon' | 'Evening'>('Morning');
-  const [urgency, setUrgency] = useState<'Normal' | 'Urgent' | 'Emergency'>('Normal');
-  const [address, setAddress] = useState('');
-  const [issueDesc, setIssueDesc] = useState('');
-  const [photos, setPhotos] = useState<string[]>([]); // Base64 data URLs
-  const [isAck, setIsAck] = useState(false);
-  
-  // UI Helpers
-  const [formError, setFormError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [successInfo, setSuccessInfo] = useState('');
-  const [isDragging, setIsDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Sync custom state passed from Construction sub-service card "Book Now"
   useEffect(() => {
-    // Read live services from DB
-    const loadServices = async () => {
-      try {
-        const loaded = await db.getServices();
-        setServices(loaded);
-      } catch (err) {
-        console.error("Failed to load services", err);
+    const searchParams = new URLSearchParams(location.search);
+    const bookParam = searchParams.get('book');
+    const serviceNameEn = searchParams.get('name_en');
+    const serviceNameAr = searchParams.get('name_ar');
+    const serviceId = searchParams.get('service_id');
+    const categoryId = searchParams.get('category');
+    const feeParam = searchParams.get('booking_fee');
+
+    if (bookParam === 'true' && serviceNameEn && serviceNameAr && serviceId) {
+      if (!user) {
+        navigate('/login?redirect=home');
+        return;
       }
-    };
-    loadServices();
-  }, []);
+      setBookingService({
+        id: serviceId,
+        name_en: serviceNameEn,
+        name_ar: serviceNameAr,
+        category: (categoryId as any) || 'construction_contracting',
+        booking_fee: feeParam ? parseInt(feeParam, 10) : 25,
+        description_en: '',
+        description_ar: '',
+        active: true
+      });
+      setSelectedService(null);
+      setPrefDate('');
+      setPrefTimeSlot('Morning');
+      setUrgency('Normal');
+      setAddress('');
+      setIssueDesc('');
+      setPhotos([]);
+      setIsAck(false);
+      setFormError('');
+      setSuccessInfo('');
+      // Clean query search parameters safely
+      navigate('/', { replace: true });
+    }
+  }, [location, user, navigate]);
 
   const handleBookNowBtn = (srv: Service, e?: React.MouseEvent) => {
-    if (e) {
-      e.stopPropagation(); // Prevent opening service card details click conflict
-    }
-    
+    if (e) e.stopPropagation();
     if (!user) {
-      // Not logged in - redirect to login
       navigate('/login');
       return;
     }
-
-    // Initialize values
     setBookingService(srv);
-    setSelectedService(null); // Close detail modal if open
+    setSelectedService(null);
     setPrefDate('');
     setPrefTimeSlot('Morning');
     setUrgency('Normal');
@@ -103,78 +124,40 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
     setSuccessInfo('');
   };
 
-  const handleFileUpload = (filesList: FileList | null) => {
-    if (!filesList) return;
-    setFormError('');
-
-    const newPhotos = [...photos];
-    if (newPhotos.length + filesList.length > 3) {
-      setFormError(t('serviceLimitExceeded'));
+  const handleCreateBooking = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) {
+      setFormError('Authentication required');
       return;
     }
+    if (!bookingService) return;
 
-    Array.from(filesList).forEach(file => {
-      if (!file.type.startsWith('image/')) {
-        setFormError(language === 'ar' ? 'تنبيه: يُسمح فقط بملفات الصور.' : 'Notice: Only image files are permitted.');
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result && newPhotos.length < 3) {
-          newPhotos.push(event.target.result as string);
-          setPhotos([...newPhotos]);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    handleFileUpload(e.dataTransfer.files);
-  };
-
-  const submitBookingForm = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-    setFormError('');
-
-    if (!prefDate || !address || !issueDesc) {
-      setFormError(language === 'ar' ? 'يرجى إكمال جميع الحقول الإلزامية.' : 'Please completely fill general fields.');
-      return;
-    }
-
-    // Validate booking fee acknowledgement for Home Maintenance
-    if (bookingService?.category === 'home_maintenance' && !isAck) {
+    // Validate fee acknowledgement for categories carrying a booking fee
+    if (bookingService.category !== 'professional_consultations' && !isAck) {
       setFormError(t('ackRequired'));
       return;
     }
 
-    setLoading(true);
+    if (!address.trim()) {
+      setFormError(language === 'ar' ? 'العنوان مطلوب بالتفصيل' : 'Detailed deployment location required');
+      return;
+    }
+
+    if (!issueDesc.trim()) {
+      setFormError(language === 'ar' ? 'يرجى تقديم تفاصيل العمل المطلوب' : 'Job description details required');
+      return;
+    }
 
     try {
-      const fee = bookingService?.booking_fee || 0;
+      const fee = bookingService.booking_fee || 0;
       await db.createBooking({
         user_id: user.id,
         user_name: profile?.full_name || user.email || 'SHED client',
-        user_phone: profile?.phone || '',
-        user_email: user.email || '',
-        service_id: bookingService!.id,
-        service_name_en: bookingService!.name_en,
-        service_name_ar: bookingService!.name_ar,
-        category_id: bookingService!.category,
-        date: prefDate,
+        service_id: bookingService.id,
+        service_name_en: bookingService.name_en,
+        service_name_ar: bookingService.name_ar,
+        category_id: bookingService.category,
+        date: prefDate || new Date().toISOString().split('T')[0],
         time_slot: prefTimeSlot,
         urgency,
         address,
@@ -183,499 +166,534 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
         booking_fee: fee
       });
 
-      // Clear layout state and show spectacular success modal or feedback
-      setSuccessInfo(t('bookingSucc'));
+      setSuccessInfo(t('successBooking'));
       setTimeout(() => {
         setBookingService(null);
         navigate('/dashboard');
       }, 2500);
 
     } catch (err: any) {
-      setFormError(err?.message || (language === 'ar' ? 'فشل حجز الخدمة. حاول مرة أخرى.' : 'Booking dispatch failed. Retry.'));
-    } finally {
-      setLoading(false);
+      setFormError(err.message || 'System failed to register booking');
     }
   };
 
+  const addPhoto = () => {
+    if (photoInput.trim()) {
+      setPhotos([...photos, photoInput.trim()]);
+      setPhotoInput('');
+    }
+  };
+
+  // Filter services by category
   const filteredServices = services.filter(s => s.category === activeCategory && s.active);
 
   return (
-    <div id="home-view-container" className="bg-black text-white min-h-[calc(100vh-4.5rem)] pb-18">
-      {/* 1. Hero Spotlight - ONLY on landing */}
-      {view === 'landing' && (
-        <section id="hero-spotlight" className="relative border-b border-gray-900 bg-black py-16 sm:py-24 overflow-hidden">
-          {/* Abstract grids / High contrast vector style */}
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(204,255,0,0.06),transparent_40%)] pointer-events-none"></div>
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
-            <span className="inline-flex items-center gap-2 px-3 py-1 border border-lime-primary text-lime-primary text-[10px] font-mono tracking-widest font-bold uppercase rounded-none mb-6">
-              <Sparkles className="w-3 h-3" />
-              {t('heroTagline')}
-            </span>
-            <h1 className="font-sans text-4xl sm:text-6xl md:text-7xl font-black tracking-tighter leading-none text-white uppercase">
-              WE ARE <span className="text-lime-primary">SHED</span>
-            </h1>
-          </div>
-        </section>
-      )}
+    <div className="min-h-screen bg-white text-black flex flex-col relative overflow-hidden">
+      <BackgroundVectors />
+      <Navbar />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12">
-        {/* VIEW 1 — Landing page: Show ONLY the two big category cards */}
+      {/* Hero Header Area */}
+      <div className="bg-gradient-to-b from-zinc-50 to-white border-b border-zinc-200 py-16 px-4 relative overflow-hidden flex flex-col items-center justify-center min-h-[220px]">
+        {/* Decorative Tools Scattered Background per Step 5 */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden select-none">
+          <svg className="absolute top-6 left-12 w-24 h-24 text-black opacity-[0.03] -rotate-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          </svg>
+          <svg className="absolute bottom-4 left-[20%] w-32 h-32 text-black opacity-[0.03] -rotate-45" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          <svg className="absolute top-8 right-[15%] w-28 h-28 text-black opacity-[0.03] rotate-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <svg className="absolute bottom-6 right-8 w-24 h-24 text-black opacity-[0.03] -rotate-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 4v4m3-4v4m3-4v4m3-4v4M4 9h4" />
+          </svg>
+        </div>
+
+        <div className="max-w-7xl mx-auto text-center font-mono relative z-10 w-full flex items-center justify-center">
+          {!logoFailed ? (
+            <img 
+              src={shedLogo} 
+              alt="SHED" 
+              className="mx-auto max-w-[280px] w-full" 
+              onError={() => setLogoFailed(true)}
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <span className="text-5xl md:text-6xl font-sans font-black tracking-widest text-[#C63300]">
+              SHED
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12 flex-grow pb-16 relative z-10">
+        {/* VIEW 1 — Landing page: Show THREE big category cards */}
         {view === 'landing' && (
-          <div id="category-panel-selector" className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+          <div id="category-panel-selector" className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+            
             {/* Home Maintenance Selector */}
             <button
               onClick={() => navigate('/maintenance')}
-              className="text-left p-8 border hover:border-lime-primary transition-all text-white rounded-none cursor-pointer flex flex-col justify-between bg-black border-gray-900 hover:bg-zinc-950 group h-[320px]"
+              className="text-left p-8 border hover:border-[#C63300] transition-all text-black rounded-none cursor-pointer flex flex-col justify-between bg-white border-zinc-200 hover:bg-zinc-50 group h-[320px] shadow-sm"
             >
               <div>
                 <div className="flex justify-between items-start mb-6">
-                  <span className="p-3 rounded-none bg-gray-900 text-gray-400 group-hover:text-lime-primary group-hover:bg-black border group-hover:border-lime-primary transition-colors">
-                    <Building className="w-6 h-6" />
+                  <span className="p-3 bg-zinc-50 text-zinc-650 group-hover:text-white group-hover:bg-[#C63300] border border-zinc-200 group-hover:border-[#C63300] transition-all">
+                    <ServiceIcon id="electrical" className="w-6 h-6" />
                   </span>
-                  <span className="font-mono text-xs font-bold text-lime-primary tracking-widest bg-zinc-900 border border-zinc-900 px-2 py-0.5">
-                    12 {language === 'ar' ? 'خدمة مدمجة' : 'SERVICES'}
+                  <span className="font-mono text-xs font-bold text-[#C63300] tracking-widest bg-zinc-50 border border-zinc-200 px-2 py-0.5">
+                    12 {language === 'ar' ? 'خدمات أساسية' : 'SERVICES'}
                   </span>
                 </div>
-                <h3 className="font-sans text-xl font-extrabold tracking-tight mb-2 uppercase group-hover:text-lime-primary transition-colors">
+                <h3 className="font-sans text-xl font-extrabold tracking-tight mb-2 uppercase group-hover:text-[#C63300] transition-colors">
                   {t('homeMaintenance')}
                 </h3>
-                <p className="text-xs text-gray-500 font-mono leading-relaxed">
-                  {language === 'ar' 
-                    ? 'حلول صيانة منزلية فورية ومميزة تغطي الكهرباء، السباكة، التكييف، التبليط، والعزل برسوم حجز ثابتة وواضحة.'
-                    : 'Instant in-house physical infrastructure updates, servicing carpentry, mechanics, plumbing, painting, and overall inspection.'}
+                <p className="text-xs text-zinc-650 font-mono leading-relaxed">
+                  {t('homeMaintenanceDesc')}
                 </p>
               </div>
-              <div className="mt-8 pt-4 border-t border-gray-900 w-full flex justify-between items-center">
-                <span className="font-mono text-[10px] uppercase text-gray-400">
-                  {language === 'ar' ? 'عرض خدمات الفئة' : 'EXPLORE UTILITIES'}
+              <div className="mt-8 pt-4 border-t border-zinc-150 w-full flex justify-between items-center">
+                <span className="font-mono text-[10px] uppercase text-zinc-550 group-hover:text-[#C63300]">
+                  {language === 'ar' ? 'عرض الخدمات والأسعار' : 'ACCESS PORTAL'}
                 </span>
-                <ArrowRight className="w-4 h-4 text-lime-primary transform group-hover:translate-x-1.5 transition-transform" />
+                <ArrowRight className="w-4 h-4 text-[#C63300] transform group-hover:translate-x-1.5 transition-transform" />
               </div>
             </button>
 
             {/* Professional Consultations Selector */}
             <button
               onClick={() => navigate('/consultations')}
-              className="text-left p-8 border hover:border-lime-primary transition-all text-white rounded-none cursor-pointer flex flex-col justify-between bg-black border-gray-900 hover:bg-zinc-950 group h-[320px]"
+              className="text-left p-8 border hover:border-[#C63300] transition-all text-black rounded-none cursor-pointer flex flex-col justify-between bg-white border-zinc-200 hover:bg-zinc-50 group h-[320px] shadow-sm"
             >
               <div>
                 <div className="flex justify-between items-start mb-6">
-                  <span className="p-3 rounded-none bg-gray-900 text-gray-400 group-hover:text-lime-primary group-hover:bg-black border group-hover:border-lime-primary transition-colors">
-                    <Sparkles className="w-6 h-6" />
+                  <span className="p-3 bg-zinc-50 text-zinc-650 group-hover:text-white group-hover:bg-[#C63300] border border-zinc-200 group-hover:border-[#C63300] transition-all">
+                    <ServiceIcon id="special-design" className="w-6 h-6" />
                   </span>
-                  <span className="font-mono text-xs font-bold text-lime-primary tracking-widest bg-zinc-900 border border-zinc-900 px-2 py-0.5">
-                    4 {language === 'ar' ? 'استشارات كبرى' : 'FIELDS'}
+                  <span className="font-mono text-xs font-bold text-[#C63300] tracking-widest bg-zinc-50 border border-zinc-200 px-2 py-0.5">
+                    4 {language === 'ar' ? 'تخصصات هندسية' : 'FIELDS'}
                   </span>
                 </div>
-                <h3 className="font-sans text-xl font-extrabold tracking-tight mb-2 uppercase group-hover:text-lime-primary transition-colors">
+                <h3 className="font-sans text-xl font-extrabold tracking-tight mb-2 uppercase group-hover:text-[#C63300] transition-colors">
                   {t('profConsultations')}
                 </h3>
-                <p className="text-xs text-gray-500 font-mono leading-relaxed">
-                  {language === 'ar'
-                    ? 'رسم المخططات الهندسية، إدارة المقاولات، والتصميم الداخلي مع مهندسينا ومصممينا المتخصصين المعتمدين.'
-                    : 'On-demand contracting, structural architecture, interior design layout styling, and mechanical design consultancy.'}
+                <p className="text-xs text-zinc-650 font-mono leading-relaxed">
+                  {t('profConsultationsDesc')}
                 </p>
               </div>
-              <div className="mt-8 pt-4 border-t border-gray-900 w-full flex justify-between items-center">
-                <span className="font-mono text-[10px] uppercase text-gray-400">
-                  {language === 'ar' ? 'عرض الاستشارات' : 'EXPLORE SCHEMES'}
+              <div className="mt-8 pt-4 border-t border-zinc-150 w-full flex justify-between items-center">
+                <span className="font-mono text-[10px] uppercase text-zinc-550 group-hover:text-[#C63300]">
+                  {language === 'ar' ? 'استشارة خبير مؤهل' : 'BOOK SURVEYOR'}
                 </span>
-                <ArrowRight className="w-4 h-4 text-lime-primary transform group-hover:translate-x-1.5 transition-transform" />
+                <ArrowRight className="w-4 h-4 text-[#C63300] transform group-hover:translate-x-1.5 transition-transform" />
               </div>
             </button>
+
+            {/* Construction & Contracting Selector (STEP 1) */}
+            <button
+              onClick={() => navigate('/construction')}
+              className="text-left p-8 border hover:border-[#C63300] transition-all text-black rounded-none cursor-pointer flex flex-col justify-between bg-white border-zinc-200 hover:bg-zinc-50 group h-[320px] shadow-sm"
+            >
+              <div>
+                <div className="flex justify-between items-start mb-6">
+                  <span className="p-3 bg-zinc-50 text-zinc-650 group-hover:text-white group-hover:bg-[#C63300] border border-zinc-200 group-hover:border-[#C63300] transition-all">
+                    <HardHat className="w-6 h-6" />
+                  </span>
+                  <span className="font-mono text-xs font-bold text-[#C63300] tracking-widest bg-zinc-50 border border-zinc-200 px-2 py-0.5">
+                    16 {language === 'ar' ? 'أقسام البناء' : 'DIVISIONS'}
+                  </span>
+                </div>
+                <h3 className="font-sans text-xl font-extrabold tracking-tight mb-2 uppercase group-hover:text-[#C63300] transition-colors">
+                  {language === 'ar' ? 'البناء والمقاولات' : 'CONSTRUCTION & CONTRACTING'}
+                </h3>
+                <p className="text-xs text-zinc-650 font-mono leading-relaxed">
+                  {language === 'ar' 
+                    ? 'أشغال البناء والتشييد والقصارة وعروض الخرسانة والأنظمة الكهروميكانيكية المتكاملة للموقع.' 
+                    : 'Heavy division physical solutions detailing masonry, concrete, acoustic isolation, woodwork, HVAC and electric distributions.'}
+                </p>
+              </div>
+              <div className="mt-8 pt-4 border-t border-zinc-150 w-full flex justify-between items-center">
+                <span className="font-mono text-[10px] uppercase text-zinc-550 group-hover:text-[#C63300]">
+                  {language === 'ar' ? 'استكشاف الأقسام بالتفصيل' : 'EXPLORE DIVISIONS'}
+                </span>
+                <ArrowRight className="w-4 h-4 text-[#C63300] transform group-hover:translate-x-1.5 transition-transform" />
+              </div>
+            </button>
+
           </div>
         )}
 
-        {/* VIEW 2A / 2B — Category Pages */}
-        {view !== 'landing' && (
-          <>
-            {/* Back Button */}
+        {/* VIEW 2 — Dynamic List view of Selected Category (Maintenance or Consultations) */}
+        {view !== 'landing' && !bookingService && (
+          <div className="relative">
+            {/* Maintenance Category Faded Decorative background elements per Step 5 */}
+            {activeCategory === 'home_maintenance' && (
+              <div className="absolute inset-0 pointer-events-none overflow-hidden select-none -z-10">
+                {/* House Outline */}
+                <svg className="absolute top-10 left-[-40px] w-48 h-48 text-black opacity-[0.03]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                {/* Tool Box */}
+                <svg className="absolute bottom-40 right-[-40px] w-56 h-56 text-black opacity-[0.03] rotate-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
+                  <rect x="3" y="9" width="18" height="11" rx="2" />
+                  <path d="M9 9V6a2 2 0 012-2h2a2 2 0 012 2v3" />
+                  <path d="M3 13h18" />
+                </svg>
+                {/* Ladder */}
+                <svg className="absolute top-[40%] right-[10%] w-32 h-64 text-black opacity-[0.03] -rotate-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
+                  <path d="M8 3v18M16 3v18M8 6h8M8 10h8M8 14h8M8 18h8" />
+                </svg>
+              </div>
+            )}
+
+            {/* Breadcrumb back links */}
             <button
               onClick={() => navigate('/')}
-              className="mb-8 flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-gray-400 hover:text-lime-primary border border-gray-900 hover:border-lime-primary px-4 py-2 bg-black transition-all cursor-pointer"
+              className="inline-flex items-center gap-1 text-[11px] font-mono text-zinc-500 hover:text-black mb-6 uppercase tracking-wider relative z-10"
             >
-              <ArrowLeft className="w-4 h-4" />
-              {language === 'ar' ? 'العودة للرئيسية' : 'Back to Home'}
+              <ArrowLeft className="w-3.5 h-3.5" />
+              {t('backToList')}
             </button>
 
             {/* Category Header Indicators */}
-            <div className="border-b border-gray-900 pb-4 mb-8">
-              <h2 className="text-2xl font-sans font-black tracking-tight text-white uppercase">
+            <div className="border-b border-zinc-200 pb-4 mb-8 relative z-10">
+              <h2 className="text-2xl font-sans font-black tracking-tight text-black uppercase font-mono">
                 {activeCategory === 'home_maintenance' ? t('homeMaintenance') : t('profConsultations')}
               </h2>
-              <p className="text-xs text-gray-500 font-mono mt-1">
+              <p className="text-xs text-zinc-600 font-mono mt-1 leading-relaxed max-w-2xl">
                 {activeCategory === 'home_maintenance'
-                  ? (language === 'ar' ? 'جميع الخدمات المقدمة تخضع لرسوم حجز ثابتة تورد للشركة' : 'ALL INFRASTRUCTURE REPAIRS CARRY STANDARDIZED BOOKING RATES')
-                  : (language === 'ar' ? 'استشارات متخصصة تهدف لتحليل ودراسة نطاق المشاريع' : 'EXPERT DESIGN AND ENGINEERING ANALYSIS SURVEYS')}
+                  ? t('homeMaintenanceDesc')
+                  : t('profConsultationsDesc')}
               </p>
             </div>
 
             {/* Services Grid */}
-            <div id="services-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10">
               {filteredServices.map(srv => (
                 <div
                   key={srv.id}
                   onClick={() => setSelectedService(srv)}
-                  className="group bg-black border border-gray-900 hover:border-lime-primary transition-all p-6 relative flex flex-col justify-between cursor-pointer min-h-[300px]"
+                  className="p-6 border border-zinc-200 bg-white hover:border-[#C63300] hover:bg-zinc-50/50 transition-all cursor-pointer flex flex-col justify-between group h-[260px] rounded-none shadow-sm"
                 >
-                  <div>
+                  <div className="flex-grow">
                     {/* Header indicators */}
-                    <div className="flex justify-between items-start mb-6 w-full">
-                      <span className="p-2.5 bg-gray-950 border border-gray-900 text-lime-primary group-hover:bg-lime-primary group-hover:text-black transition-all">
+                    <div className="flex justify-between items-start mb-4 w-full">
+                      <span className="p-2.5 bg-zinc-50 border border-zinc-200 text-[#C63300] group-hover:bg-[#C63300] group-hover:text-white transition-all">
                         <ServiceIcon id={srv.id} className="w-5 h-5" />
                       </span>
                       
                       {srv.category === 'home_maintenance' ? (
-                        <span className="bg-lime-primary text-black text-[10px] font-mono font-extrabold px-2 py-0.5 uppercase tracking-wide">
+                        <span className="bg-zinc-100 border border-zinc-200 text-black text-[10px] font-mono font-extrabold px-2 py-0.5 uppercase tracking-wide">
                           {t('flatBookingFee')}: ${srv.booking_fee}
                         </span>
                       ) : (
-                        <span className="border border-gray-800 text-gray-500 text-[10px] font-mono px-2 py-0.5 uppercase">
-                          {t('noBookingFee')}
+                        <span className="bg-zinc-50 border border-zinc-200 text-zinc-650 text-[10px] font-mono px-2 py-0.5 uppercase tracking-wide">
+                          {language === 'ar' ? 'معدل متغير' : 'QUOTE REQUEST'}
                         </span>
                       )}
                     </div>
 
-                    {/* Service Metadata */}
-                    <h4 className="font-sans text-lg font-black tracking-tight text-white uppercase mb-2 group-hover:text-lime-primary transition-colors">
+                    <h4 className="font-sans text-md font-black tracking-tight text-black uppercase mb-1.5 group-hover:text-[#C63300] transition-colors">
                       {language === 'ar' ? srv.name_ar : srv.name_en}
                     </h4>
-                    <p className="text-xs text-gray-500 font-mono leading-relaxed line-clamp-3 mb-6">
+                    <p className="text-xs text-zinc-650 font-mono leading-relaxed line-clamp-3 mb-4">
                       {language === 'ar' ? srv.description_ar : srv.description_en}
                     </p>
                   </div>
 
                   {/* Action Trigger */}
-                  <div className="w-full">
-                    <div className="w-full h-[1px] bg-gray-950 mb-4 group-hover:bg-lime-primary/20 transition-colors"></div>
+                  <div className="pt-3 border-t border-zinc-150 flex justify-between items-center w-full mt-auto">
                     <button
                       onClick={(e) => handleBookNowBtn(srv, e)}
-                      className="w-full py-3 bg-lime-primary text-black hover:bg-white text-xs font-mono font-black uppercase tracking-wider transition-all block text-center border border-lime-primary hover:border-white cursor-pointer"
+                      className="text-[10px] font-mono font-black text-[#C63300] uppercase hover:underline"
                     >
-                      {t('bookNow')}
+                      {language === 'ar' ? 'احجز الآن' : 'BOOK DEPLOYMENT'}
                     </button>
+                    <ArrowRight className="w-4 h-4 text-zinc-400 group-hover:text-[#C63300] transform group-hover:translate-x-1.5 transition-transform" />
                   </div>
                 </div>
               ))}
             </div>
-          </>
-        )}
-      </div>
-
-      {/* ==========================================
-          MODAL A: SERVICE DETAILS & OVERVIEW
-         ========================================== */}
-      {selectedService && (
-        <div id="service-detail-modal" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-black border border-gray-900 p-8 relative">
-            {/* Lime top accent bar */}
-            <div className="absolute top-0 left-0 right-0 h-1 bg-lime-primary"></div>
-            
-            {/* Close Button */}
-            <button
-              onClick={() => setSelectedService(null)}
-              className="absolute top-4 right-4 p-1 bg-gray-950 text-gray-400 hover:text-white border border-gray-800 hover:border-white"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            {/* Content Profile */}
-            <div className="flex items-center gap-4 mb-6">
-              <span className="p-3.5 bg-lime-primary text-black font-semibold">
-                <ServiceIcon id={selectedService.id} className="w-6 h-6" />
-              </span>
-              <div>
-                <span className="font-mono text-[10px] text-lime-primary tracking-widest uppercase bg-zinc-950 px-2 py-0.5 border border-zinc-900">
-                  {selectedService.category === 'home_maintenance' ? t('homeMaintenance') : t('profConsultations')}
-                </span>
-                <h3 className="font-sans text-2xl font-black text-white uppercase mt-1">
-                  {language === 'ar' ? selectedService.name_ar : selectedService.name_en}
-                </h3>
-              </div>
-            </div>
-
-            <div className="space-y-4 font-mono text-xs text-gray-400 leading-relaxed mb-8">
-              <p className="bg-zinc-950 p-4 border border-zinc-900 text-white rounded-none leading-relaxed">
-                {language === 'ar' ? selectedService.description_ar : selectedService.description_en}
-              </p>
-
-              {selectedService.category === 'home_maintenance' ? (
-                <div className="flex justify-between items-center p-3 border border-lime-primary/30 bg-lime-primary/5">
-                  <span className="text-white uppercase font-bold">{t('flatBookingFee')}</span>
-                  <span className="text-lime-primary text-sm font-black tracking-wider">${selectedService.booking_fee}</span>
-                </div>
-              ) : (
-                <div className="flex justify-between items-center p-3 border border-gray-900 bg-zinc-950">
-                  <span className="text-gray-400 uppercase">{t('flatBookingFee')}</span>
-                  <span className="text-white text-xs uppercase font-extrabold tracking-widest">{t('noBookingFee')}</span>
-                </div>
-              )}
-
-              <div className="flex gap-2 text-[10px] text-gray-500 items-start pt-2">
-                <Info className="w-4 h-4 text-lime-primary shrink-0 mt-0.5" />
-                <p>
-                  {language === 'ar' 
-                    ? 'سيتم تولي الخدمة بالكامل من قبل فنيي شيد ومهندسيها الداخليين طبقاً لمعايير الإنجاز الفني المتفوق.'
-                    : 'All service parameters are strictly fulfilled by certified internal SHED technicians and in-house lead specialists.'}
-                </p>
-              </div>
-            </div>
-
-            {/* Modal Action CTA */}
-            <button
-              onClick={() => handleBookNowBtn(selectedService)}
-              className="w-full py-4 bg-lime-primary text-black hover:bg-white text-sm font-mono font-black uppercase tracking-wider transition-all cursor-pointer"
-            >
-              {t('bookNow')}
-            </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ==========================================
-          MODAL B: COMPREHENSIVE BOOKING FLOW
-         ========================================== */}
-      {bookingService && (
-        <div id="booking-flow-modal" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-xs overflow-y-auto">
-          <div className="w-full max-w-2xl bg-black border border-gray-900 p-6 sm:p-8 my-8 relative">
-            <div className="absolute top-0 left-0 right-0 h-1.5 bg-lime-primary"></div>
-            
-            {/* Close */}
+        {/* BOOKING MODULE VIEW */}
+        {bookingService && (
+          <div className="max-w-2xl mx-auto border border-zinc-200 bg-white p-6 md:p-8 shadow-sm relative z-10 text-black">
             <button
               onClick={() => setBookingService(null)}
-              className="absolute top-4 right-4 p-1 bg-gray-950 text-gray-400 hover:text-white border border-gray-800 hover:border-white"
+              className="inline-flex items-center gap-1 text-[11px] font-mono text-zinc-500 hover:text-black mb-6 uppercase tracking-wider"
             >
-              <X className="w-4 h-4" />
+              <ArrowLeft className="w-3.5 h-3.5" />
+              {language === 'ar' ? 'الرجوع ومراجعة الخدمات' : 'CANCEL BOOKING'}
             </button>
 
             {/* Stage Title */}
             <div className="mb-6">
-              <span className="font-mono text-[9px] text-lime-primary tracking-widest uppercase bg-zinc-950 px-2 py-0.5 border border-zinc-900">
-                {bookingService.category === 'home_maintenance' ? t('homeMaintenance') : t('profConsultations')}
+              <span className="font-mono text-[9px] text-[#C63300] tracking-widest uppercase bg-zinc-50 px-2 py-1 border border-zinc-200">
+                {bookingService.category === 'home_maintenance' 
+                  ? t('homeMaintenance') 
+                  : bookingService.category === 'construction_contracting'
+                    ? (language === 'ar' ? 'أعمال البناء والمقاولات' : 'CONSTRUCTION & CONTRACTING')
+                    : t('profConsultations')}
               </span>
-              <h3 className="font-sans text-2xl font-bold tracking-tight text-white uppercase mt-2">
+              <h3 className="font-sans text-2xl font-black tracking-tighter text-black uppercase mt-2">
                 {t('bookingFormTitle')} 
-                <span className="text-lime-primary">
-                  {language === 'ar' ? bookingService.name_ar : bookingService.name_en}
-                </span>
               </h3>
+              <p className="text-xs text-[#C63300] font-mono font-bold mt-1 uppercase">
+                {language === 'ar' ? 'مسار المهمة:' : 'TARGET UTILITY:'} {language === 'ar' ? bookingService.name_ar : bookingService.name_en}
+              </p>
             </div>
 
             {successInfo ? (
-              <div className="p-8 text-center bg-zinc-950 border border-lime-primary text-white rounded-none">
-                <CheckSquare className="w-16 h-16 text-lime-primary mx-auto mb-4 animate-bounce" />
-                <h4 className="font-sans text-xl font-bold uppercase mb-2">SUCCESSFULLY ASSIGNED DETECTOR</h4>
-                <p className="font-mono text-sm leading-relaxed text-gray-400">
-                  {successInfo}
-                </p>
+              <div className="bg-zinc-50 border border-[#C63300] p-6 text-center text-[#C63300] font-mono my-8">
+                <ShieldCheck className="w-12 h-12 mx-auto mb-3" />
+                <p className="text-sm uppercase font-bold tracking-wider">{successInfo}</p>
               </div>
             ) : (
-              <form onSubmit={submitBookingForm} className="space-y-5">
+              <form onSubmit={handleCreateBooking} className="space-y-6">
                 {formError && (
-                  <div className="p-4 bg-black border border-red-500 rounded-none flex items-start gap-2.5">
-                    <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-                    <p className="text-xs text-white font-mono break-all">{formError}</p>
+                  <div className="bg-red-50 border border-red-200 p-3 flex items-center gap-2.5 text-xs text-red-500 font-mono">
+                    <AlertTriangle className="w-4 h-4 text-red-650 shrink-0" />
+                    <span>{formError}</span>
                   </div>
                 )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   {/* Preferred Date */}
                   <div>
-                    <label className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">
+                    <label className="block text-[10px] font-mono font-black uppercase tracking-wider text-zinc-650 mb-2">
+                      <Calendar className="w-3.5 h-3.5 inline mr-1 text-[#C63300]" />
                       {t('preferredDate')} *
                     </label>
-                    <div className="relative">
-                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-600">
-                        <Calendar className="w-4 h-4" />
-                      </span>
-                      <input
-                        type="date"
-                        value={prefDate}
-                        onChange={e => setPrefDate(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 bg-black border border-gray-800 text-white rounded-none focus:outline-none focus:border-lime-primary font-mono text-sm"
-                        required
-                        min={new Date().toISOString().split('T')[0]}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Preferred Time Slot */}
-                  <div>
-                    <label className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">
-                      {t('preferredTime')} *
-                    </label>
-                    <div className="relative">
-                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-600">
-                        <Clock className="w-4 h-4" />
-                      </span>
-                      <select
-                        value={prefTimeSlot}
-                        onChange={e => setPrefTimeSlot(e.target.value as any)}
-                        className="w-full pl-10 pr-4 py-2 bg-black border border-gray-800 text-white rounded-none focus:outline-none focus:border-lime-primary font-mono text-sm uppercase leading-none"
-                      >
-                        <option value="Morning">{t('morning')}</option>
-                        <option value="Afternoon">{t('afternoon')}</option>
-                        <option value="Evening">{t('evening')}</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  {/* Urgency selection */}
-                  <div>
-                    <label className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">
-                      {t('urgencyLevel')} *
-                    </label>
-                    <div className="flex gap-2">
-                      {(['Normal', 'Urgent', 'Emergency'] as const).map(u => (
-                        <button
-                          key={u}
-                          type="button"
-                          onClick={() => setUrgency(u)}
-                          className={`flex-1 py-2 font-mono text-xs font-bold uppercase transition-all border ${
-                            urgency === u
-                              ? 'bg-lime-primary text-black border-lime-primary'
-                              : 'bg-black text-gray-500 border-gray-800 hover:text-white'
-                          }`}
-                        >
-                          {u === 'Normal' ? t('normal') : u === 'Urgent' ? t('urgent') : t('emergency')}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Physical Location */}
-                  <div>
-                    <label className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">
-                      {t('serviceAddress')} *
-                    </label>
-                    <div className="relative">
-                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-600">
-                        <MapPin className="w-4 h-4" />
-                      </span>
-                      <input
-                        type="text"
-                        value={address}
-                        onChange={e => setAddress(e.target.value)}
-                        placeholder="District, Road Name, Building 14"
-                        className="w-full pl-10 pr-4 py-2 bg-black border border-gray-800 text-white rounded-none focus:outline-none focus:border-lime-primary font-mono text-sm"
-                        required
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Scope Description */}
-                <div>
-                  <label className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">
-                    {t('issueDescription')} *
-                  </label>
-                  <div className="relative">
-                    <span className="absolute top-2.5 left-3 text-gray-600">
-                      <FileText className="w-4 h-4" />
-                    </span>
-                    <textarea
-                      value={issueDesc}
-                      onChange={e => setIssueDesc(e.target.value)}
-                      placeholder={language === 'ar' ? 'اكتب تفاصيل الطلب أو طبيعة المشكلة...' : 'Describe the explicit requirements or plumbing pipe breakdown detail...'}
-                      rows={3}
-                      className="w-full pl-10 pr-4 py-2.5 bg-black border border-gray-800 text-white rounded-none focus:outline-none focus:border-lime-primary font-mono text-xs leading-relaxed"
-                      required
-                    ></textarea>
-                  </div>
-                </div>
-
-                {/* Drag-and-Drop Photo Upload Interface */}
-                <div>
-                  <label className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-2">
-                    {t('photoUpload')}
-                  </label>
-                  <div
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`border-2 border-dashed py-6 px-4 text-center cursor-pointer transition-colors ${
-                      isDragging
-                        ? 'border-lime-primary bg-lime-primary/5 text-lime-primary'
-                        : 'border-gray-800 hover:border-lime-primary hover:bg-zinc-950 text-gray-400'
-                    }`}
-                  >
-                    <Upload className="w-8 h-8 mx-auto mb-2 text-lime-primary" />
-                    <p className="font-mono text-[11px] uppercase tracking-wide">
-                      {t('dragDropText')}
-                    </p>
                     <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={e => handleFileUpload(e.target.files)}
-                      multiple
-                      accept="image/*"
-                      className="hidden"
+                      type="date"
+                      value={prefDate}
+                      onChange={e => setPrefDate(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-zinc-250 hover:border-[#C63300] text-black rounded-none focus:outline-none focus:border-[#C63300] font-mono text-xs"
+                      required
                     />
                   </div>
 
-                  {/* Thumbnail Previews */}
+                  {/* Operational Time Slot */}
+                  <div>
+                    <label className="block text-[10px] font-mono font-black uppercase tracking-wider text-zinc-650 mb-2">
+                      <Clock className="w-3.5 h-3.5 inline mr-1 text-[#C63300]" />
+                      {t('preferredTime')} *
+                    </label>
+                    <select
+                      value={prefTimeSlot}
+                      onChange={e => setPrefTimeSlot(e.target.value as any)}
+                      className="w-full px-3 py-2 bg-white border border-zinc-250 hover:border-[#C63300] text-black rounded-none focus:outline-none focus:border-[#C63300] font-mono text-xs uppercase"
+                    >
+                      <option value="Morning">08:00 - 12:00 (Morning)</option>
+                      <option value="Afternoon">12:00 - 16:00 (Afternoon)</option>
+                      <option value="Evening">16:00 - 20:00 (Evening)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Priority Urgency Level */}
+                <div>
+                  <label className="block text-[10px] font-mono font-black uppercase tracking-wider text-zinc-650 mb-2">
+                    {t('urgencyLevel')} *
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['Normal', 'Urgent', 'Emergency'].map(lvl => (
+                      <button
+                        key={lvl}
+                        type="button"
+                        onClick={() => setUrgency(lvl as any)}
+                        className={`py-2 border text-xs font-mono uppercase font-bold rounded-none cursor-pointer transition-all ${
+                          urgency === lvl 
+                            ? 'bg-[#C63300] text-white border-[#C63300]' 
+                            : 'bg-zinc-50 text-zinc-650 border-zinc-200 hover:border-[#C63300]'
+                        }`}
+                      >
+                        {lvl}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Physical deployment address */}
+                <div>
+                  <label className="block text-[10px] font-mono font-black uppercase tracking-wider text-zinc-650 mb-2">
+                    <MapPin className="w-3.5 h-3.5 inline mr-1 text-[#C63300]" />
+                    {t('addressLocation')} *
+                  </label>
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={e => setAddress(e.target.value)}
+                    placeholder="e.g. Block 4, Street 15, Villa 29"
+                    className="w-full px-3 py-2 bg-white border border-zinc-250 hover:border-[#C63300] text-black rounded-none focus:outline-none focus:border-[#C63300] font-mono text-xs"
+                    required
+                  />
+                </div>
+
+                {/* Job description details */}
+                <div>
+                  <label className="block text-[10px] font-mono font-black uppercase tracking-wider text-zinc-650 mb-2">
+                    <ClipboardList className="w-3.5 h-3.5 inline mr-1 text-[#C63300]" />
+                    {t('taskDescription')} *
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={issueDesc}
+                    onChange={e => setIssueDesc(e.target.value)}
+                    placeholder={language === 'ar' ? 'اشرح بالتفصيل نطاق العمل المطلوب لتسريع مباشرته مخرجات فنية...' : 'Specify requirements, core scope of diagnostic verification, blueprint analysis details.'}
+                    className="w-full px-3 py-2 bg-white border border-zinc-250 hover:border-[#C63300] text-black rounded-none focus:outline-none focus:border-[#C63300] font-mono text-xs"
+                    required
+                  />
+                </div>
+
+                {/* Photo Attachments */}
+                <div>
+                  <label className="block text-[10px] font-mono font-black uppercase tracking-wider text-zinc-650 mb-2">
+                    <Camera className="w-3.5 h-3.5 inline mr-1 text-[#C63300]" />
+                    {t('optionalPhotos')}
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={photoInput}
+                      onChange={e => setPhotoInput(e.target.value)}
+                      placeholder="Insert photo asset URL"
+                      className="flex-grow px-3 py-2 bg-white border border-zinc-250 hover:border-[#C63300] text-black rounded-none focus:outline-none focus:border-[#C63300] font-mono text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={addPhoto}
+                      className="px-4 py-2 bg-zinc-50 border border-zinc-200 hover:border-[#C63300] text-xs font-mono uppercase hover:text-[#C63300] cursor-pointer text-zinc-800"
+                    >
+                      {language === 'ar' ? 'إضافة' : 'ATTACH'}
+                    </button>
+                  </div>
                   {photos.length > 0 && (
-                    <div className="flex gap-3 mt-3">
-                      {photos.map((pt, idx) => (
-                        <div key={idx} className="relative w-16 h-16 border border-gray-800 bg-zinc-950">
-                          <img src={pt} alt="preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setPhotos(photos.filter((_, i) => i !== idx));
-                            }}
-                            className="absolute -top-1 -right-1 bg-black border border-gray-850 hover:border-red-500 hover:text-red-500 rounded p-0.5 text-[8p] leading-none"
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {photos.map((ph, pi) => (
+                        <div key={pi} className="relative bg-zinc-50 px-2 py-1 text-[10px] font-mono text-zinc-600 border border-zinc-200 flex items-center gap-1">
+                          <span className="truncate max-w-[150px]">{ph}</span>
+                          <button 
+                            type="button" 
+                            onClick={() => setPhotos(photos.filter((_, idx) => idx !== pi))}
+                            className="text-red-500 hover:text-red-400 font-extrabold"
                           >
-                            <X className="w-3 h-3" />
+                            ×
                           </button>
                         </div>
                       ))}
-                      <div className="flex items-center text-gray-500 text-[10px] font-mono uppercase">
-                        {photos.length}/3 {language === 'ar' ? 'صور محملة' : 'FILES LOADED'}
-                      </div>
                     </div>
                   )}
                 </div>
 
-                {/* Booking Fee Acknowledgement (Required for Home Maintenance) */}
-                {bookingService.category === 'home_maintenance' && (
-                  <div className="p-4 bg-zinc-950 border border-lime-primary/30">
-                    <label className="flex items-start gap-3 cursor-pointer">
+                {/* Booking Fee acknowledgement (Skip for consultations) */}
+                {bookingService.category !== 'professional_consultations' ? (
+                  <div className="p-4 bg-zinc-50 border border-zinc-200">
+                    <label className="flex items-start gap-3 cursor-pointer select-none">
                       <input
                         type="checkbox"
                         checked={isAck}
                         onChange={e => setIsAck(e.target.checked)}
-                        className="w-4.5 h-4.5 mt-0.5 accent-lime-primary text-black border border-gray-800 bg-black"
+                        className="mt-1 w-4 h-4 bg-white border border-zinc-250 text-[#C63300] rounded-none focus:ring-0 cursor-pointer accent-[#C63300]"
                       />
-                      <span className="font-mono text-xs text-gray-300 select-none leading-normal">
+                      <span className="text-[11px] font-mono text-zinc-600 leading-relaxed uppercase">
                         {t('acknowledgementText')}{' '}
-                        <strong className="text-lime-primary font-black">
-                          ${bookingService.booking_fee}
-                        </strong>{' '}
-                        {language === 'ar' ? 'عن رسوم الحجز الثابتة.' : 'for home dispatch assignment.'} *
+                        <strong className="text-[#C63300]">${bookingService.booking_fee}</strong>.{' '}
+                        {language === 'ar' ? 'سيتم احتساب هذا المبلغ كرسوم لحجز الفريق وتجهيز الدعم الميداني وتأكيد الزيارة بالتنسيق معكم.' : 'This serves as a security flat dispatch charge to secure our response technician crew, deploy the utility vehicle, and approve slot locks.'}
                       </span>
                     </label>
                   </div>
+                ) : (
+                  <div className="p-4 bg-zinc-50 border border-zinc-200 text-[11px] font-mono text-zinc-600 uppercase leading-relaxed">
+                    <Info className="w-4 h-4 text-[#C63300] inline mr-1" />
+                    {language === 'ar' 
+                      ? 'الاستشارات المهنية لا تتطلب رسوم حجز مسبقة. سيقوم مندوبنا بالاتصال بكم خلال ساعة لتقديم عرض مالي متكامل مبني على طبيعة الاستشارة المطلوبة.' 
+                      : 'Specialized surveys are quote-driven and carry zero flat reservation fees. A dedicated technical accounts officer will connect on your coordinates within 60 minutes with custom scoping values.'}
+                  </div>
                 )}
 
-                {/* Confirm Dispatch CTA */}
+                {/* Book Action Button */}
                 <button
                   type="submit"
-                  disabled={loading}
-                  className="w-full py-4 mt-2 bg-lime-primary text-black hover:bg-white text-sm font-mono font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="w-full py-3 bg-[#C63300] hover:bg-black text-white hover:text-white font-sans font-black tracking-tight uppercase transition-all duration-200 cursor-pointer flex justify-center items-center gap-2 text-sm"
                 >
-                  <Check className="w-4 h-4" />
-                  <span>{loading ? 'TRANSMITTING REQUEST...' : t('confirmBookingBtn')}</span>
+                  <ShieldCheck className="w-5 h-5" />
+                  {t('bookNow')}
                 </button>
               </form>
             )}
           </div>
+        )}
+      </div>
+
+      {/* SERVICE DETAILS DIALOG / MODAL (IF APPLICABLE for high-polish view) */}
+      {selectedService && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm font-mono">
+          <div className="w-full max-w-lg bg-white border border-zinc-200 shadow-xl p-6 relative text-black">
+            <button
+               onClick={() => setSelectedService(null)}
+               className="absolute top-4 right-4 text-zinc-500 hover:text-black text-lg font-bold cursor-pointer"
+            >
+              ×
+            </button>
+            
+            <div className="mb-4">
+              <span className="p-2 inline-block bg-zinc-50 text-[#C63300] border border-zinc-200">
+                <ServiceIcon id={selectedService.id} className="w-6 h-6" />
+              </span>
+              <h3 className="text-xl font-sans font-black text-black uppercase mt-3">
+                {language === 'ar' ? selectedService.name_ar : selectedService.name_en}
+              </h3>
+              <p className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">
+                {selectedService.category === 'home_maintenance' ? t('homeMaintenance') : t('profConsultations')}
+              </p>
+            </div>
+
+            <div className="py-4 border-t border-b border-zinc-200 my-4 text-xs text-zinc-655 leading-relaxed">
+              {language === 'ar' ? selectedService.description_ar : selectedService.description_en}
+            </div>
+
+            <div className="flex justify-between items-center">
+              <div>
+                {selectedService.category === 'home_maintenance' ? (
+                  <span className="text-[11px] uppercase text-zinc-500">
+                    {t('flatBookingFee')}: <strong className="text-[#C63300]">${selectedService.booking_fee}</strong>
+                  </span>
+                ) : (
+                  <span className="text-[11px] uppercase text-[#C63300] font-bold">
+                    VARIABLE / SCORING QUOTE
+                  </span>
+                )}
+              </div>
+              
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSelectedService(null)}
+                  className="px-3 py-1.5 border border-zinc-200 hover:border-black text-xs text-zinc-500 hover:text-black uppercase transition-all cursor-pointer"
+                >
+                  {language === 'ar' ? 'أغلق' : 'CLOSE'}
+                </button>
+                <button
+                  onClick={() => handleBookNowBtn(selectedService)}
+                  className="px-4 py-1.5 bg-[#C63300] text-white hover:bg-black hover:text-white text-xs font-black uppercase transition-all cursor-pointer"
+                >
+                  {language === 'ar' ? 'ابدأ الحجز' : 'BOOK SERVICE'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
+
+      {/* FOOTER */}
+      <footer className="mt-auto border-t border-zinc-200 bg-zinc-50 py-10 text-center font-mono text-zinc-500 text-[10px] uppercase tracking-wider">
+        <div className="max-w-7xl mx-auto px-4">
+          <p>© 2026 SHED.SERVICES GLOBAL FIELD DEPLOYMENT NETWORKS. ENCRYPTED & SECURED.</p>
+        </div>
+      </footer>
     </div>
   );
 };

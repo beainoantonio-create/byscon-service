@@ -2,165 +2,161 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import { Mail, Lock, User, Phone, AlertTriangle } from 'lucide-react';
+import { Navbar } from '../components/Navbar';
+import { BackgroundVectors } from '../components/BackgroundVectors';
+import { Mail, Key, User, AlertTriangle } from 'lucide-react';
+import { ShedLogo } from '../components/ShedLogo';
 
 export const Signup: React.FC = () => {
-  const { signUp } = useAuth();
-  const { t, language } = useLanguage();
+  const { signup } = useAuth();
+  const { language } = useLanguage();
   const navigate = useNavigate();
 
-  const [fullName, setFullName] = useState('');
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName || !email || !phone || !password) {
-      setError(language === 'ar' ? 'يرجى ملء جميع الحقول المطلوبة الكترونياً.' : 'Please completely fill in all parameters.');
+    setError('');
+
+    if (!name || !email || !password || !confirmPassword) {
+      setError(language === 'ar' ? 'يرجى ملء جميع الحقول الإلزامية' : 'All mandatory fields must be populated');
       return;
     }
 
+    if (password !== confirmPassword) {
+      setError(language === 'ar' ? 'كلمات المرور غير متوافقة' : 'Passcodes do not match alignment check');
+      return;
+    }
+
+    if (password.length < 4) {
+      setError(language === 'ar' ? 'يجب أن تكون كلمة المرور 4 أحرف كحد أدنى' : 'Passcode must have at least 4 chars');
+      return;
+    }
+
+    setLoading(true);
     try {
-      setError('');
-      setSubmitting(true);
-      await signUp(email, password, fullName, phone);
-      navigate('/');
-    } catch (err: any) {
-      setError(err?.message || (language === 'ar' ? 'تعذر إنشاء الحساب. يُرجى التحقق من المدخلات.' : 'Registration failed. Check inputs or connection.'));
+      const success = await signup(email, password, name);
+      if (success) {
+        navigate('/dashboard');
+      } else {
+        setError(language === 'ar' ? 'البريد الإلكتروني مسجل مسبقاً في النظام.' : 'Email address already logged in system directories.');
+      }
+    } catch (err) {
+      setError('System failure registering unit profile.');
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div id="signup-layout-wrapper" className="min-h-[calc(100vh-4.5rem)] flex items-center justify-center bg-black px-4 py-12">
-      <div className="w-full max-w-md bg-black border border-gray-900 rounded-none p-8 relative overflow-hidden">
-        {/* Aesthetic highlight bar */}
-        <div className="absolute top-0 left-0 right-0 h-1.5 bg-lime-primary"></div>
+    <div className="min-h-screen bg-white text-black flex flex-col relative overflow-hidden">
+      <BackgroundVectors />
+      <Navbar />
 
-        <div className="text-center mb-8">
-          <span className="font-mono text-xs font-bold tracking-widest text-lime-primary bg-zinc-900 px-3 py-1 uppercase rounded-none">
-            {t('signupTitle')}
-          </span>
-          <h2 className="mt-4 font-sans text-3xl font-extrabold tracking-tight text-white uppercase">
-            {language === 'ar' ? 'التسجيل للمواطنين والمقيمين' : 'Shed Account Setup'}
-          </h2>
-          <p className="mt-2 text-xs text-gray-500 font-mono">
-            {language === 'ar' ? 'سجل بيانات صيانة منزلك للبدء الفوري' : 'ACCESS SHED LIVE IN-HOUSE SERVICE MODULES'}
-          </p>
-        </div>
-
-        {error && (
-          <div className="mb-6 p-4 bg-black border border-red-500 rounded-none flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-            <div className="text-xs text-white font-mono break-all leading-relaxed">
-              {error}
+      <div className="flex-grow flex items-center justify-center px-4 py-16 relative z-10 w-full">
+        <div className="w-full max-w-md border border-zinc-200 bg-white p-8 font-mono shadow-md">
+          <div className="text-center mb-8">
+            <div className="mb-4">
+              <ShedLogo className="mx-auto h-12 w-auto select-none" />
             </div>
+            <h2 className="text-2xl font-sans font-black tracking-tighter uppercase text-black">
+              {language === 'ar' ? 'تسجيل عميل جديد' : 'REGISTER OPERATOR UNIT'}
+            </h2>
+            <p className="text-[10px] text-zinc-600 uppercase tracking-wider mt-1">
+              {language === 'ar' ? 'أدخل البيانات لتثبيت نطاق حسابكم الموحد' : 'PROVISION UNIQUE SYSTEM OPERATOR CREDENTIALS'}
+            </p>
           </div>
-        )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Full Name */}
-          <div>
-            <label className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">
-              {t('fullName')}
-            </label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-600">
-                <User className="w-4 h-4" />
-              </span>
+          <form onSubmit={handleSignupSubmit} className="space-y-4">
+            {error && (
+              <div className="bg-red-50 border border-red-200 p-3 flex items-center gap-2 text-xs text-red-700">
+                <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-zinc-600 mb-2">
+                <User className="w-3 inline mr-1 text-[#C63300]" />
+                {language === 'ar' ? 'الاسم بالكامل' : 'Operator Full Name'} *
+              </label>
               <input
                 type="text"
-                value={fullName}
-                onChange={e => setFullName(e.target.value)}
-                placeholder="John Doe"
-                className="w-full pl-10 pr-4 py-2.5 bg-black border border-gray-800 text-white rounded-none focus:outline-none focus:border-lime-primary font-mono text-sm transition-colors"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Chief Commander"
+                className="w-full px-3 py-2 bg-white border border-zinc-200 hover:border-[#C63300] text-black rounded-none focus:outline-none focus:border-[#C63300] text-xs"
                 required
               />
             </div>
-          </div>
 
-          {/* Email Address */}
-          <div>
-            <label className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">
-              {t('email')}
-            </label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-600">
-                <Mail className="w-4 h-4" />
-              </span>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-zinc-600 mb-2">
+                <Mail className="w-3 inline mr-1 text-[#C63300]" />
+                {language === 'ar' ? 'البريد الإلكتروني الخاص بكم' : 'Operator Email'} *
+              </label>
               <input
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="developer@shed.com"
-                className="w-full pl-10 pr-4 py-2.5 bg-black border border-gray-800 text-white rounded-none focus:outline-none focus:border-lime-primary font-mono text-sm transition-colors"
+                placeholder="operator@shed.com"
+                className="w-full px-3 py-2 bg-white border border-zinc-200 hover:border-[#C63300] text-black rounded-none focus:outline-none focus:border-[#C63300] text-xs"
                 required
               />
             </div>
-          </div>
 
-          {/* Phone Number */}
-          <div>
-            <label className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">
-              {t('phone')}
-            </label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-600">
-                <Phone className="w-4 h-4" />
-              </span>
-              <input
-                type="tel"
-                value={phone}
-                onChange={e => setPhone(e.target.value)}
-                placeholder="+966 50 123 4567"
-                className="w-full pl-10 pr-4 py-2.5 bg-black border border-gray-800 text-white rounded-none focus:outline-none focus:border-lime-primary font-mono text-sm transition-colors"
-                required
-              />
-            </div>
-          </div>
-
-          {/* Password */}
-          <div>
-            <label className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-1.5">
-              {t('password')}
-            </label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-600">
-                <Lock className="w-4 h-4" />
-              </span>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-zinc-600 mb-2">
+                <Key className="w-3 inline mr-1 text-[#C63300]" />
+                {language === 'ar' ? 'كلمة المرور' : 'Secure Passcode'} *
+              </label>
               <input
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 pr-4 py-2.5 bg-black border border-gray-800 text-white rounded-none focus:outline-none focus:border-lime-primary font-mono text-sm transition-colors"
+                className="w-full px-3 py-2 bg-white border border-zinc-200 hover:border-[#C63300] text-black rounded-none focus:outline-none focus:border-[#C63300] text-xs"
                 required
               />
             </div>
-          </div>
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full py-3.5 mt-2 bg-lime-primary text-black hover:bg-white transition-all font-mono font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            <span>{submitting ? 'Registering...' : t('signupBtn')}</span>
-          </button>
-        </form>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-zinc-600 mb-2">
+                <Key className="w-3 inline mr-1 text-[#C63300]" />
+                {language === 'ar' ? 'تأكيد كلمة المرور' : 'Confirm Passcode'} *
+              </label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full px-3 py-2 bg-white border border-zinc-200 hover:border-[#C63300] text-black rounded-none focus:outline-none focus:border-[#C63300] text-xs"
+                required
+              />
+            </div>
 
-        <div className="mt-6 pt-6 border-t border-gray-900 text-center">
-          <p className="text-xs text-gray-500 font-mono">
-            {t('alreadyHaveAccount')}{' '}
-            <Link to="/login" className="text-white font-bold hover:text-lime-primary uppercase transition-colors">
-              {t('loginBtn')}
+            <button
+               type="submit"
+               disabled={loading}
+               className="w-full py-2.5 bg-[#C63300] hover:bg-black text-white hover:text-white font-sans font-black tracking-tight uppercase transition-all duration-200 cursor-pointer text-xs border border-transparent"
+            >
+              {loading ? 'DEPLOYING PROVISION...' : (language === 'ar' ? 'تثبيت الحساب الجديد ومباشرة العمل' : 'INITIALIZE PROFILE DIRECTORY')}
+            </button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <Link to="/login" className="text-[10px] text-zinc-500 hover:text-[#C63300] font-bold uppercase underline">
+              {language === 'ar' ? 'لديك حساب بالفعل؟ سجل الدخول الآن' : 'SECURE OPERATOR ALREADY ACTIVE? AUTHENTICATE'}
             </Link>
-          </p>
+          </div>
         </div>
       </div>
     </div>
   );
 };
+export default Signup;

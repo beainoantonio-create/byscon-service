@@ -1,141 +1,140 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import { Lock, Mail, AlertTriangle, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Navbar } from '../components/Navbar';
+import { BackgroundVectors } from '../components/BackgroundVectors';
+import { Key, Mail, AlertTriangle } from 'lucide-react';
+import { ShedLogo } from '../components/ShedLogo';
 
 export const Login: React.FC = () => {
-  const { signIn } = useAuth();
-  const { t, language } = useLanguage();
+  const { login } = useAuth();
+  const { language } = useLanguage();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
-      setError(language === 'ar' ? 'يرجى إكمال جميع الحقول.' : 'Please fill in all fields.');
-      return;
-    }
+    if (!email || !password) return;
+    setLoading(true);
+    setError('');
 
     try {
-      setError('');
-      setSubmitting(true);
-      await signIn(email, password);
-      // Let's redirect based on role or just default. The router will handle auth state, but we'll redirect.
-      // We will allow general auth redirect or directly route to '/' or '/admin'.
-      // We can inspect the profile after login or let the App router handle redirections. Let's redirect to '/' first
-      // which will direct them appropriately.
-      navigate('/');
-    } catch (err: any) {
-      setError(err?.message || (language === 'ar' ? 'فشل تسجيل الدخول. يرجى التحقق من المدخلات.' : 'Login failed. Please check your credentials.'));
+      const success = await login(email, password);
+      if (success) {
+        const redirect = searchParams.get('redirect') || '';
+        if (redirect === 'home') {
+          navigate('/');
+        } else {
+          // Check if admin or standard client
+          if (email.toLowerCase().trim() === 'admin@shed.com') {
+            navigate('/admin');
+          } else {
+            navigate('/dashboard');
+          }
+        }
+      } else {
+        setError(language === 'ar' ? 'فشل التحقق من الهوية. يرجى مراجعة تفاصيل البريد وكلمة المرور.' : 'Authentication failed. Please verify email and password.');
+      }
+    } catch (err) {
+      setError('System encountered failure during auth query.');
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
-  };
-
-  const handleSetDemoAdmin = () => {
-    setEmail('admin@shed.com');
-    setPassword('Admin@1234');
   };
 
   return (
-    <div id="login-layout-wrapper" className="min-h-[calc(100vh-4.5rem)] flex items-center justify-center bg-black px-4 py-12">
-      <div className="w-full max-w-md bg-black border border-gray-900 rounded-none p-8 relative overflow-hidden">
-        {/* Aesthetic highlight bar */}
-        <div className="absolute top-0 left-0 right-0 h-1.5 bg-lime-primary"></div>
+    <div className="min-h-screen bg-white text-black flex flex-col relative overflow-hidden">
+      <BackgroundVectors />
+      <Navbar />
 
-        <div className="text-center mb-8">
-          <span className="font-mono text-xs font-bold tracking-widest text-lime-primary bg-zinc-900 px-3 py-1 uppercase rounded-none">
-            {t('loginTitle')}
-          </span>
-          <h2 className="mt-4 font-sans text-3xl font-extrabold tracking-tight text-white uppercase">
-            {language === 'ar' ? 'الدخول للمنظومة' : 'Internal Sign-In'}
-          </h2>
-          <p className="mt-2 text-xs text-gray-500 font-mono">
-            {language === 'ar' ? 'يرجى إدخال بيانات الاعتماد الخاصة بك' : 'AUTHENTICATION REQUIRED FOR SYSTEM ENGAGEMENT'}
-          </p>
-        </div>
-
-        {error && (
-          <div className="mb-6 p-4.5 bg-black border border-red-500 rounded-none flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-            <div className="text-xs text-white font-mono break-all leading-relaxed">
-              {error}
+      <div className="flex-grow flex items-center justify-center px-4 py-16 relative z-10 w-full">
+        <div className="w-full max-w-md border border-zinc-200 bg-white p-8 font-mono shadow-md">
+          <div className="text-center mb-8">
+            <div className="mb-4">
+              <ShedLogo className="mx-auto h-12 w-auto select-none" />
             </div>
+            <h2 className="text-2xl font-sans font-black tracking-tighter uppercase text-black">
+              {language === 'ar' ? 'بوابة التحقق الآمنة' : 'UTILITIES AUTH PORTAL'}
+            </h2>
+            <p className="text-[10px] text-zinc-600 uppercase tracking-wider mt-1">
+              {language === 'ar' ? 'أدخل رمز تفعيل الحساب' : 'LOG INTO YOUR SECURE DEPLOYMENT TERMINAL'}
+            </p>
           </div>
-        )}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Email input */}
-          <div>
-            <label className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400 mb-2">
-              {t('email')}
-            </label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-600">
-                <Mail className="w-4 h-4" />
-              </span>
+          <form onSubmit={handleLoginSubmit} className="space-y-6">
+            {error && (
+              <div className="bg-red-50 border border-red-200 p-3 flex items-center gap-2 text-xs text-red-700">
+                <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-zinc-600 mb-2">
+                <Mail className="w-3 inline mr-1 text-[#C63300]" />
+                {language === 'ar' ? 'البريد الإلكتروني للعميل' : 'Registered Operator Email'} *
+              </label>
               <input
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="developer@shed.com"
-                className="w-full pl-10 pr-4 py-3 bg-black border border-gray-800 text-white rounded-none focus:outline-none focus:border-lime-primary font-mono text-sm leading-none transition-colors"
+                placeholder="operator@shed.com"
+                className="w-full px-3 py-2 bg-white border border-zinc-200 hover:border-[#C63300] text-black rounded-none focus:outline-none focus:border-[#C63300] text-xs"
                 required
               />
             </div>
-          </div>
 
-          {/* Password input */}
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <label className="block text-xs font-mono font-bold uppercase tracking-wider text-gray-400">
-                {t('password')}
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-zinc-600 mb-2">
+                <Key className="w-3 inline mr-1 text-[#C63300]" />
+                {language === 'ar' ? 'كلمة المرور السرية' : 'Secure Passcode'} *
               </label>
-            </div>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-600">
-                <Lock className="w-4 h-4" />
-              </span>
               <input
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 pr-4 py-3 bg-black border border-gray-800 text-white rounded-none focus:outline-none focus:border-lime-primary font-mono text-sm leading-none transition-colors"
+                className="w-full px-3 py-2 bg-white border border-zinc-200 hover:border-[#C63300] text-black rounded-none focus:outline-none focus:border-[#C63300] text-xs"
                 required
               />
             </div>
+
+            <button
+               type="submit"
+               disabled={loading}
+               className="w-full py-2.5 bg-[#C63300] hover:bg-black text-white hover:text-white font-sans font-black tracking-tight uppercase transition-all duration-200 cursor-pointer text-xs border border-transparent"
+            >
+              {loading ? 'PROCESSING...' : (language === 'ar' ? 'المتابعة والدخول' : 'ESTABLISH CONNECTIVITY')}
+            </button>
+          </form>
+
+          {/* Seed credentials description block */}
+          <div className="mt-8 pt-6 border-t border-zinc-150 text-[10px] text-zinc-500 space-y-2 uppercase leading-relaxed text-center">
+            <p className="font-bold">
+              {language === 'ar'
+                ? 'ملاحظة: يمكنك إدخال أي بريد إلكتروني وكلمة مرور من 4 أحرف وسيقوم النظام بتسجيل دخولك فوراً للأغراض التوضيحية.'
+                : 'DEMO PASSCODE SECURITY NOTE:'}
+            </p>
+            <p className="text-[#C63300]">
+              ADMIN: <strong className="underline">admin@shed.com</strong> / PASS: <strong className="underline">password</strong><br />
+              CLIENT: <strong className="underline">client@shed.com</strong> / PASS: <strong className="underline">password</strong>
+            </p>
           </div>
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full py-4 mt-2 bg-lime-primary text-black hover:bg-white transition-all font-mono font-extrabold text-sm uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            <span>{submitting ? 'Authenticating...' : t('loginBtn')}</span>
-            {language === 'ar' ? (
-              <ArrowLeft className="w-4 h-4" />
-            ) : (
-              <ArrowRight className="w-4 h-4" />
-            )}
-          </button>
-        </form>
-
-        {/* Guest fallback trigger or Demo Quick Login seed */}
-        <div className="mt-6 pt-6 border-t border-gray-900 text-center space-y-4">
-          <p className="text-xs text-gray-500 font-mono">
-            {t('dontHaveAccount')}{' '}
-            <Link to="/signup" className="text-white font-bold hover:text-lime-primary uppercase transition-colors">
-              {t('signupBtn')}
+          <div className="mt-4 text-center">
+            <Link to="/signup" className="text-[10px] text-zinc-500 hover:text-[#C63300] font-bold uppercase underline">
+              {language === 'ar' ? 'ليس لديك حساب؟ سجل حساباً جديداً' : 'NO ACCOUNT? REGISTER OPERATOR UNIT'}
             </Link>
-          </p>
+          </div>
         </div>
       </div>
     </div>
   );
 };
+export default Login;
