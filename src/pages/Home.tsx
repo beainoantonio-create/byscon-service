@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -27,6 +27,28 @@ interface HomeProps {
   view?: 'landing' | 'maintenance' | 'consultations';
 }
 
+type TimeSlot = 'Morning' | 'Afternoon' | 'Evening';
+
+const TIME_SLOTS: { value: TimeSlot; label: string; startHour: number }[] = [
+  { value: 'Morning', label: '08:00 - 12:00 (Morning)', startHour: 8 },
+  { value: 'Afternoon', label: '12:00 - 16:00 (Afternoon)', startHour: 12 },
+  { value: 'Evening', label: '16:00 - 20:00 (Evening)', startHour: 16 }
+];
+
+const formatLocalDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getAvailableTimeSlots = (selectedDate: string, todayDate: string, now: Date) => {
+  if (selectedDate !== todayDate) return TIME_SLOTS;
+
+  const currentHour = now.getHours() + now.getMinutes() / 60;
+  return TIME_SLOTS.filter(slot => currentHour < slot.startHour);
+};
+
 export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
   const { user, profile } = useAuth();
   const { language, t } = useLanguage();
@@ -42,7 +64,7 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
   // Booking Form States
   const [bookingService, setBookingService] = useState<Service | null>(null);
   const [prefDate, setPrefDate] = useState('');
-  const [prefTimeSlot, setPrefTimeSlot] = useState<'Morning' | 'Afternoon' | 'Evening'>('Morning');
+  const [prefTimeSlot, setPrefTimeSlot] = useState<TimeSlot>('Morning');
   const [urgency, setUrgency] = useState<'Normal' | 'Urgent' | 'Emergency'>('Normal');
   const [address, setAddress] = useState('');
   const [issueDesc, setIssueDesc] = useState('');
@@ -52,6 +74,12 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
   const [formError, setFormError] = useState('');
   const [successInfo, setSuccessInfo] = useState('');
   const [bookingReturnPath, setBookingReturnPath] = useState<string | null>(null);
+  const [scheduleNow, setScheduleNow] = useState(() => new Date());
+  const todayDate = formatLocalDate(scheduleNow);
+  const availableTimeSlots = useMemo(
+    () => getAvailableTimeSlots(prefDate || todayDate, todayDate, scheduleNow),
+    [prefDate, todayDate, scheduleNow]
+  );
 
   const resetBookingFlow = () => {
     setBookingService(null);
@@ -67,6 +95,7 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
     setFormError('');
     setSuccessInfo('');
     setBookingReturnPath(null);
+    setScheduleNow(new Date());
   };
 
   // Sychronize database with services
@@ -99,6 +128,24 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
       navigate({ pathname: '/', search: '' }, { replace: true, state: null });
     }
   }, [location.state, navigate, view]);
+
+  useEffect(() => {
+    if (!bookingService) return;
+
+    setScheduleNow(new Date());
+    const intervalId = window.setInterval(() => {
+      setScheduleNow(new Date());
+    }, 60000);
+
+    return () => window.clearInterval(intervalId);
+  }, [bookingService]);
+
+  useEffect(() => {
+    if (availableTimeSlots.length === 0) return;
+    if (!availableTimeSlots.some(slot => slot.value === prefTimeSlot)) {
+      setPrefTimeSlot(availableTimeSlots[0].value);
+    }
+  }, [availableTimeSlots, prefTimeSlot]);
 
   // Sync custom state passed from Construction sub-service card "Book Now"
   useEffect(() => {
@@ -137,6 +184,7 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
       setFormError('');
       setSuccessInfo('');
       setBookingReturnPath(returnToParam || (categoryId === 'construction_contracting' ? '/construction' : null));
+      setScheduleNow(new Date());
       // Clean query search parameters safely
       navigate('/', { replace: true });
     }
@@ -160,6 +208,7 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
     setFormError('');
     setSuccessInfo('');
     setBookingReturnPath(null);
+    setScheduleNow(new Date());
   };
 
   const handleCancelBooking = () => {
@@ -177,6 +226,23 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
       return;
     }
     if (!bookingService) return;
+
+    const selectedDate = prefDate;
+    if (!selectedDate) {
+      setFormError(language === 'ar' ? 'يرجى اختيار تاريخ تنفيذ صالح' : 'Please select a valid operational date');
+      return;
+    }
+
+    if (selectedDate < todayDate) {
+      setFormError(language === 'ar' ? 'لا يمكن اختيار تاريخ سابق لليوم' : 'Preferred operational date cannot be in the past');
+      return;
+    }
+
+    const validSlots = getAvailableTimeSlots(selectedDate, todayDate, new Date());
+    if (!validSlots.some(slot => slot.value === prefTimeSlot)) {
+      setFormError(language === 'ar' ? 'يرجى اختيار فترة تنفيذ مستقبلية متاحة' : 'Please select an available future execution range');
+      return;
+    }
 
     // Validate fee acknowledgement for categories carrying a booking fee
     if (bookingService.category !== 'professional_consultations' && !isAck) {
@@ -203,7 +269,7 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
         service_name_en: bookingService.name_en,
         service_name_ar: bookingService.name_ar,
         category_id: bookingService.category,
-        date: prefDate || new Date().toISOString().split('T')[0],
+        date: selectedDate,
         time_slot: prefTimeSlot,
         urgency,
         address,
@@ -517,6 +583,7 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
                       type="date"
                       value={prefDate}
                       onChange={e => setPrefDate(e.target.value)}
+                      min={todayDate}
                       className="w-full px-3 py-2 bg-white border border-zinc-250 hover:border-[#C63300] text-black rounded-none focus:outline-none focus:border-[#C63300] font-mono text-xs"
                       required
                     />
@@ -529,14 +596,28 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
                       {t('preferredTime')} *
                     </label>
                     <select
-                      value={prefTimeSlot}
-                      onChange={e => setPrefTimeSlot(e.target.value as any)}
+                      value={availableTimeSlots.length === 0 ? '' : prefTimeSlot}
+                      onChange={e => setPrefTimeSlot(e.target.value as TimeSlot)}
+                      disabled={availableTimeSlots.length === 0}
                       className="w-full px-3 py-2 bg-white border border-zinc-250 hover:border-[#C63300] text-black rounded-none focus:outline-none focus:border-[#C63300] font-mono text-xs uppercase"
                     >
-                      <option value="Morning">08:00 - 12:00 (Morning)</option>
-                      <option value="Afternoon">12:00 - 16:00 (Afternoon)</option>
-                      <option value="Evening">16:00 - 20:00 (Evening)</option>
+                      {availableTimeSlots.length > 0 ? (
+                        availableTimeSlots.map(slot => (
+                          <option key={slot.value} value={slot.value}>
+                            {slot.label}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="">
+                          {language === 'ar' ? 'لا توجد فترات متاحة اليوم' : 'No execution ranges available today'}
+                        </option>
+                      )}
                     </select>
+                    {availableTimeSlots.length === 0 && prefDate === todayDate && (
+                      <p className="mt-2 text-[10px] font-mono uppercase text-red-600">
+                        {language === 'ar' ? 'اختر تاريخ الغد أو بعده للحجز.' : 'Choose tomorrow or a later date to book.'}
+                      </p>
+                    )}
                   </div>
                 </div>
 
