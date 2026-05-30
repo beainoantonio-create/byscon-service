@@ -17,7 +17,7 @@ export const Navbar: React.FC = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/');
+    navigate('/', { state: { resetHome: true } });
   };
 
   return (
@@ -25,7 +25,7 @@ export const Navbar: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 justify-between items-center">
           {/* Logo / Title */}
-          <Link to="/" className="flex items-center group">
+          <Link to="/" state={{ resetHome: true }} className="flex items-center group">
             <ShedLogo className="h-7 w-auto select-none" />
           </Link>
 
@@ -33,6 +33,7 @@ export const Navbar: React.FC = () => {
           <div className="hidden md:flex items-center gap-6 text-xs font-bold uppercase tracking-wider">
             <Link 
               to="/" 
+              state={{ resetHome: true }}
               className={`flex items-center gap-1 hover:text-[#C63300] transition-colors ${location.pathname === '/' ? 'text-[#C63300]' : 'text-zinc-600'}`}
             >
               <Home className="w-3.5 h-3.5" />

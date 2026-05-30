@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { Navbar } from '../components/Navbar';
 import { BackgroundVectors } from '../components/BackgroundVectors';
@@ -225,17 +225,31 @@ const CONSTRUCTION_DIVISIONS: Division[] = [
 export const Construction: React.FC = () => {
   const { language, t } = useLanguage();
   const navigate = useNavigate();
+  const location = useLocation();
   
   // Dynamic Level state ("level-1" or "level-2")
   const [currentLevel, setCurrentLevel] = useState<'level-1' | 'level-2'>('level-1');
   const [selectedDivision, setSelectedDivision] = useState<Division | null>(null);
+
+  useEffect(() => {
+    const divisionId = new URLSearchParams(location.search).get('division');
+    if (!divisionId) return;
+
+    const division = CONSTRUCTION_DIVISIONS.find(item => item.id === divisionId);
+    if (division) {
+      setSelectedDivision(division);
+      setCurrentLevel('level-2');
+      navigate('/construction', { replace: true });
+    }
+  }, [location.search, navigate]);
 
   const handleSelectDivision = (division: Division) => {
     if (!division.subServices || division.subServices.length === 0) {
       // Navigate directly to booking flow if no subservices exist
       const srvNameEn = division.name_en;
       const srvNameAr = division.name_ar;
-      const url = `/?book=true&name_en=${encodeURIComponent(srvNameEn)}&name_ar=${encodeURIComponent(srvNameAr)}&service_id=${division.id}&category=construction_contracting&booking_fee=25`;
+      const returnTo = encodeURIComponent('/construction');
+      const url = `/?book=true&name_en=${encodeURIComponent(srvNameEn)}&name_ar=${encodeURIComponent(srvNameAr)}&service_id=${division.id}&category=construction_contracting&booking_fee=25&return_to=${returnTo}`;
       navigate(url);
     } else {
       setSelectedDivision(division);
@@ -251,7 +265,8 @@ export const Construction: React.FC = () => {
     const formatAr = `${selectedDivision.name_ar} — ${sub.name_ar}`;
 
     // Navigate to homepage with URL search params triggering booking state
-    const url = `/?book=true&name_en=${encodeURIComponent(formatEn)}&name_ar=${encodeURIComponent(formatAr)}&service_id=${sub.id}&category=construction_contracting&booking_fee=25`;
+    const returnTo = encodeURIComponent(`/construction?division=${selectedDivision.id}`);
+    const url = `/?book=true&name_en=${encodeURIComponent(formatEn)}&name_ar=${encodeURIComponent(formatAr)}&service_id=${sub.id}&category=construction_contracting&booking_fee=25&return_to=${returnTo}`;
     navigate(url);
   };
 

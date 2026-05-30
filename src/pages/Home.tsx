@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -32,6 +32,7 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
   const { language, t } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
+  const previousViewRef = useRef(view);
 
   const [services, setServices] = useState<Service[]>(SEED_SERVICES);
   const [activeCategory, setActiveCategory] = useState<'home_maintenance' | 'professional_consultations'>('home_maintenance');
@@ -50,6 +51,23 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
   const [isAck, setIsAck] = useState(false);
   const [formError, setFormError] = useState('');
   const [successInfo, setSuccessInfo] = useState('');
+  const [bookingReturnPath, setBookingReturnPath] = useState<string | null>(null);
+
+  const resetBookingFlow = () => {
+    setBookingService(null);
+    setSelectedService(null);
+    setPrefDate('');
+    setPrefTimeSlot('Morning');
+    setUrgency('Normal');
+    setAddress('');
+    setIssueDesc('');
+    setPhotos([]);
+    setPhotoInput('');
+    setIsAck(false);
+    setFormError('');
+    setSuccessInfo('');
+    setBookingReturnPath(null);
+  };
 
   // Sychronize database with services
   useEffect(() => {
@@ -65,6 +83,23 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
     }
   }, [view]);
 
+  // Reset transient booking/detail state when returning from a category page to the hub.
+  useEffect(() => {
+    const previousView = previousViewRef.current;
+    if (view === 'landing' && previousView !== 'landing') {
+      resetBookingFlow();
+    }
+    previousViewRef.current = view;
+  }, [view]);
+
+  useEffect(() => {
+    const locationState = location.state as { resetHome?: boolean } | null;
+    if (view === 'landing' && locationState?.resetHome) {
+      resetBookingFlow();
+      navigate({ pathname: '/', search: '' }, { replace: true, state: null });
+    }
+  }, [location.state, navigate, view]);
+
   // Sync custom state passed from Construction sub-service card "Book Now"
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
@@ -74,6 +109,7 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
     const serviceId = searchParams.get('service_id');
     const categoryId = searchParams.get('category');
     const feeParam = searchParams.get('booking_fee');
+    const returnToParam = searchParams.get('return_to');
 
     if (bookParam === 'true' && serviceNameEn && serviceNameAr && serviceId) {
       if (!user) {
@@ -100,6 +136,7 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
       setIsAck(false);
       setFormError('');
       setSuccessInfo('');
+      setBookingReturnPath(returnToParam || (categoryId === 'construction_contracting' ? '/construction' : null));
       // Clean query search parameters safely
       navigate('/', { replace: true });
     }
@@ -122,6 +159,15 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
     setIsAck(false);
     setFormError('');
     setSuccessInfo('');
+    setBookingReturnPath(null);
+  };
+
+  const handleCancelBooking = () => {
+    const returnPath = bookingReturnPath;
+    resetBookingFlow();
+    if (returnPath) {
+      navigate(returnPath);
+    }
   };
 
   const handleCreateBooking = async (e: React.FormEvent) => {
@@ -229,7 +275,7 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12 flex-grow pb-16 relative z-10">
         {/* VIEW 1 — Landing page: Show THREE big category cards */}
-        {view === 'landing' && (
+        {view === 'landing' && !bookingService && (
           <div id="category-panel-selector" className="grid grid-cols-1 md:grid-cols-3 auto-rows-fr gap-6 mb-12">
             
             {/* Home Maintenance Selector */}
@@ -422,7 +468,7 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
         {bookingService && (
           <div className="max-w-2xl mx-auto border border-zinc-200 bg-white p-6 md:p-8 shadow-sm relative z-10 text-black">
             <button
-              onClick={() => setBookingService(null)}
+              onClick={handleCancelBooking}
               className="inline-flex items-center gap-1 text-[11px] font-mono text-zinc-500 hover:text-black mb-6 uppercase tracking-wider"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
