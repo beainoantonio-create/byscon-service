@@ -230,12 +230,12 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12 flex-grow pb-16 relative z-10">
         {/* VIEW 1 — Landing page: Show THREE big category cards */}
         {view === 'landing' && (
-          <div id="category-panel-selector" className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+          <div id="category-panel-selector" className="grid grid-cols-1 md:grid-cols-3 auto-rows-fr gap-6 mb-12">
             
             {/* Home Maintenance Selector */}
             <button
               onClick={() => navigate('/maintenance')}
-              className="text-left p-8 border hover:border-[#C63300] transition-all text-black rounded-none cursor-pointer flex flex-col justify-between bg-white border-zinc-200 hover:bg-zinc-50 group h-[320px] shadow-sm"
+              className="text-left p-8 border hover:border-[#C63300] transition-all text-black rounded-none cursor-pointer flex h-full min-h-[340px] flex-col bg-white border-zinc-200 hover:bg-zinc-50 group shadow-sm"
             >
               <div>
                 <div className="flex justify-between items-start mb-6">
@@ -246,14 +246,14 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
                     12 {language === 'ar' ? 'خدمات أساسية' : 'SERVICES'}
                   </span>
                 </div>
-                <h3 className="font-sans text-xl font-extrabold tracking-tight mb-2 uppercase group-hover:text-[#C63300] transition-colors">
+                <h3 className="font-sans text-xl font-extrabold tracking-tight mb-2 min-h-[56px] uppercase group-hover:text-[#C63300] transition-colors">
                   {t('homeMaintenance')}
                 </h3>
-                <p className="text-xs text-zinc-650 font-mono leading-relaxed">
+                <p className="text-xs text-zinc-650 font-mono leading-relaxed min-h-[72px]">
                   {t('homeMaintenanceDesc')}
                 </p>
               </div>
-              <div className="mt-8 pt-4 border-t border-zinc-150 w-full flex justify-between items-center">
+              <div className="mt-auto pt-4 border-t border-zinc-150 w-full flex justify-between items-center">
                 <span className="font-mono text-[10px] uppercase text-zinc-550 group-hover:text-[#C63300]">
                   {language === 'ar' ? 'عرض الخدمات والأسعار' : 'ACCESS PORTAL'}
                 </span>
@@ -264,7 +264,7 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
             {/* Professional Consultations Selector */}
             <button
               onClick={() => navigate('/consultations')}
-              className="text-left p-8 border hover:border-[#C63300] transition-all text-black rounded-none cursor-pointer flex flex-col justify-between bg-white border-zinc-200 hover:bg-zinc-50 group h-[320px] shadow-sm"
+              className="text-left p-8 border hover:border-[#C63300] transition-all text-black rounded-none cursor-pointer flex h-full min-h-[340px] flex-col bg-white border-zinc-200 hover:bg-zinc-50 group shadow-sm"
             >
               <div>
                 <div className="flex justify-between items-start mb-6">
@@ -275,14 +275,14 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
                     4 {language === 'ar' ? 'تخصصات هندسية' : 'FIELDS'}
                   </span>
                 </div>
-                <h3 className="font-sans text-xl font-extrabold tracking-tight mb-2 uppercase group-hover:text-[#C63300] transition-colors">
+                <h3 className="font-sans text-xl font-extrabold tracking-tight mb-2 min-h-[56px] uppercase group-hover:text-[#C63300] transition-colors">
                   {t('profConsultations')}
                 </h3>
-                <p className="text-xs text-zinc-650 font-mono leading-relaxed">
+                <p className="text-xs text-zinc-650 font-mono leading-relaxed min-h-[72px]">
                   {t('profConsultationsDesc')}
                 </p>
               </div>
-              <div className="mt-8 pt-4 border-t border-zinc-150 w-full flex justify-between items-center">
+              <div className="mt-auto pt-4 border-t border-zinc-150 w-full flex justify-between items-center">
                 <span className="font-mono text-[10px] uppercase text-zinc-550 group-hover:text-[#C63300]">
                   {language === 'ar' ? 'استشارة خبير مؤهل' : 'BOOK SURVEYOR'}
                 </span>
@@ -293,7 +293,7 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
             {/* Construction & Contracting Selector (STEP 1) */}
             <button
               onClick={() => navigate('/construction')}
-              className="text-left p-8 border hover:border-[#C63300] transition-all text-black rounded-none cursor-pointer flex flex-col justify-between bg-white border-zinc-200 hover:bg-zinc-50 group h-[320px] shadow-sm"
+              className="text-left p-8 border hover:border-[#C63300] transition-all text-black rounded-none cursor-pointer flex h-full min-h-[340px] flex-col bg-white border-zinc-200 hover:bg-zinc-50 group shadow-sm"
             >
               <div>
                 <div className="flex justify-between items-start mb-6">
@@ -304,16 +304,16 @@ export const Home: React.FC<HomeProps> = ({ view = 'landing' }) => {
                     16 {language === 'ar' ? 'أقسام البناء' : 'DIVISIONS'}
                   </span>
                 </div>
-                <h3 className="font-sans text-xl font-extrabold tracking-tight mb-2 uppercase group-hover:text-[#C63300] transition-colors">
+                <h3 className="font-sans text-xl font-extrabold tracking-tight mb-2 min-h-[56px] uppercase group-hover:text-[#C63300] transition-colors">
                   {language === 'ar' ? 'البناء والمقاولات' : 'CONSTRUCTION & CONTRACTING'}
                 </h3>
-                <p className="text-xs text-zinc-650 font-mono leading-relaxed">
+                <p className="text-xs text-zinc-650 font-mono leading-relaxed min-h-[72px]">
                   {language === 'ar' 
                     ? 'أشغال البناء والتشييد والقصارة وعروض الخرسانة والأنظمة الكهروميكانيكية المتكاملة للموقع.' 
                     : 'Heavy division physical solutions detailing masonry, concrete, acoustic isolation, woodwork, HVAC and electric distributions.'}
                 </p>
               </div>
-              <div className="mt-8 pt-4 border-t border-zinc-150 w-full flex justify-between items-center">
+              <div className="mt-auto pt-4 border-t border-zinc-150 w-full flex justify-between items-center">
                 <span className="font-mono text-[10px] uppercase text-zinc-550 group-hover:text-[#C63300]">
                   {language === 'ar' ? 'استكشاف الأقسام بالتفصيل' : 'EXPLORE DIVISIONS'}
                 </span>
